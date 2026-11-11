@@ -1,0 +1,9 @@
+node_modules/
+build/
+.react-router/
+data/
+config.json
+*.local
+.env
+.env.*
+.DS_Store

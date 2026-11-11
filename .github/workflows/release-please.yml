@@ -1,0 +1,126 @@
+name: release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build and publish (optional, defaults to latest release if omitted)"
+        required: false
+        type: string
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    name: Release Please
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created || steps.metadata.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name || steps.metadata.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version || steps.metadata.outputs.version }}
+    steps:
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.ASPRI_CLIENT_ID }}
+          private-key: ${{ secrets.ASPRI_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: knife
+
+      - name: Run release-please
+        uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          config-file: .github/release-config.json
+          manifest-file: .github/release-manifest.json
+
+      - name: Resolve release metadata for workflow_dispatch
+        id: metadata
+        if: ${{ github.event_name == 'workflow_dispatch' && steps.release.outputs.release_created != 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_TAG}" ]; then
+            TAG_NAME="${INPUT_TAG}"
+          else
+            TAG_NAME="$(gh release view --json tagName --jq .tagName)"
+          fi
+          VERSION="${TAG_NAME#knife-v}"
+          VERSION="${VERSION#v}"
+          echo "Resolved tag=${TAG_NAME}, version=${VERSION}"
+          echo "release_created=true" >> "$GITHUB_OUTPUT"
+          echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build & Publish to NPM
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Node.js for npm provenance
+        uses: actions/setup-node@v4
+        with:
+          node-version: 26
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build production bundle
+        run: bun run build
+
+      - name: Publish npm package
+        run: |
+          pkg_name="$(node -p "require('./package.json').name")"
+          pkg_version="$(node -p "require('./package.json').version")"
+          TAG_FLAG=""
+          if [[ "${pkg_version}" =~ -([a-zA-Z0-9]+) ]]; then
+            TAG_FLAG="--tag ${BASH_REMATCH[1]}"
+          fi
+
+          if npm view "${pkg_name}@${pkg_version}" version >/dev/null 2>&1; then
+            echo "Skipping ${pkg_name}@${pkg_version}: already published"
+          else
+            echo "Publishing ${pkg_name}@${pkg_version} ${TAG_FLAG}..."
+            npm publish --access public --provenance ${TAG_FLAG} --loglevel=verbose
+          fi
+
+      - name: Create release tarball
+        run: |
+          TARBALL=$(npm pack)
+          echo "TARBALL=$TARBALL" >> "$GITHUB_ENV"
+
+      - name: Upload Tarball to GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          TAG_NAME="${{ needs.release-please.outputs.tag_name }}"
+          gh release upload "${TAG_NAME}" "${TARBALL}" --clobber

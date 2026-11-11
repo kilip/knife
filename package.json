@@ -1,0 +1,68 @@
+{
+  "name": "@kilip/knife",
+  "version": "0.0.0-dev",
+  "type": "module",
+  "bin": {
+    "knife": "bin/knife.js"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kilip/knife.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kilip/knife/issues"
+  },
+  "homepage": "https://github.com/kilip/knife#readme",
+  "files": [
+    "bin",
+    "build",
+    "server",
+    "public",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "react-router build",
+    "dev": "bun run --watch server/index.ts",
+    "start": "bun run server/index.ts",
+    "typecheck": "react-router typegen && tsc --noEmit",
+    "test": "bun test",
+    "lint": "biome lint",
+    "format": "biome format --write",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "@react-router/dev": "8.5.1",
+    "@react-router/node": "8.5.1",
+    "@serwist/window": "^9.5.13",
+    "@tailwindcss/vite": "^4.3.5",
+    "@xterm/addon-canvas": "^0.7.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-unicode11": "^0.9.0",
+    "@xterm/addon-web-links": "^0.12.0",
+    "@xterm/addon-webgl": "^0.19.0",
+    "@xterm/xterm": "^6.0.0",
+    "isbot": "^5.1.23",
+    "lucide-react": "^1.70.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-router": "8.5.1",
+    "serwist": "^9.5.13",
+    "tailwindcss": "^4.3.5",
+    "vite": "^8.3.7"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.6",
+    "@commitlint/cli": "^21.2.4",
+    "@commitlint/config-conventional": "^21.2.4",
+    "@serwist/vite": "^9.5.13",
+    "@types/bun": "^1.4.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "husky": "^9.1.7",
+    "typescript": "^7.0.2"
+  }
+}

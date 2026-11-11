@@ -1,0 +1,16 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "timezone": "Asia/Makassar",
+  "schedule": ["* 8 * * 1"],
+  "semanticCommits": "disabled",
+  "commitMessagePrefix": "chore: 📦",
+  "commitMessageAction": "update",
+  "platformAutomerge": false,
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["minor"],
+      "automerge": true
+    }
+  ]
+}

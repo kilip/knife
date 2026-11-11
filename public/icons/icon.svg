@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#181825" />
+      <stop offset="100%" stop-color="#11111b" />
+    </linearGradient>
+
+    <!-- Blade Main Steel -->
+    <linearGradient id="bladeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f5e0dc" />
+      <stop offset="35%" stop-color="#cdd6f4" />
+      <stop offset="70%" stop-color="#cba6f7" />
+      <stop offset="100%" stop-color="#89b4fa" />
+    </linearGradient>
+
+    <!-- Cutting Edge Highlight -->
+    <linearGradient id="edgeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="60%" stop-color="#b4befe" />
+      <stop offset="100%" stop-color="#cba6f7" />
+    </linearGradient>
+
+    <!-- Spine Reflection -->
+    <linearGradient id="spineGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#bac2de" stop-opacity="0.2" />
+    </linearGradient>
+
+    <!-- Handle Gradient -->
+    <linearGradient id="handleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#313244" />
+      <stop offset="50%" stop-color="#1e1e2e" />
+      <stop offset="100%" stop-color="#181825" />
+    </linearGradient>
+
+    <!-- Bolster/Guard Gradient -->
+    <linearGradient id="bolsterGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#cba6f7" />
+      <stop offset="100%" stop-color="#74c7ec" />
+    </linearGradient>
+
+    <!-- Blade Shadow / Glow -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#cba6f7" flood-opacity="0.3" />
+    </filter>
+  </defs>
+
+  <!-- App Icon Squircle Frame -->
+  <rect x="16" y="16" width="480" height="480" rx="108" fill="url(#bg)" stroke="#313244" stroke-width="8" />
+
+  <!-- Window dots -->
+  <circle cx="68" cy="68" r="10" fill="#f38ba8" />
+  <circle cx="98" cy="68" r="10" fill="#f9e2af" />
+  <circle cx="128" cy="68" r="10" fill="#a6e3a1" />
+
+  <!-- Knife Group (Angled 45 deg, centered) -->
+  <g filter="url(#glow)">
+    <!-- Main Blade -->
+    <!-- Blade spine extends from bolster (~210, 270) to tip (~395, 125) -->
+    <!-- Cutting edge curves from tip to heel (~250, 310) -->
+    <path d="M 215 265 
+             L 375 105 
+             C 385 95, 405 105, 412 118 
+             C 415 125, 410 135, 395 150
+             L 265 315 
+             C 255 325, 235 320, 225 305
+             Z" 
+          fill="url(#bladeGrad)" />
+
+    <!-- Cutting Bevel Layer (Sharpened Edge) -->
+    <path d="M 240 295
+             L 400 135
+             C 405 138, 402 145, 395 150
+             L 265 315
+             C 255 325, 245 315, 240 295
+             Z"
+          fill="url(#edgeGrad)" />
+
+    <!-- Spine highlight line -->
+    <path d="M 216 264 L 375 105" stroke="url(#spineGrad)" stroke-width="4" stroke-linecap="round" />
+
+    <!-- Bolster / Collar -->
+    <path d="M 205 255 L 225 275 L 210 290 L 190 270 Z" fill="url(#bolsterGrad)" />
+
+    <!-- Handle -->
+    <path d="M 195 265
+             L 115 345
+             C 95 365, 95 395, 115 415
+             C 135 435, 165 435, 185 415
+             L 218 288
+             Z"
+          fill="url(#handleGrad)" 
+          stroke="#45475a" 
+          stroke-width="4" />
+
+    <!-- Handle Rivets (Silver/brass pins) -->
+    <circle cx="165" cy="365" r="7" fill="#cba6f7" stroke="#b4befe" stroke-width="2" />
+    <circle cx="135" cy="395" r="7" fill="#cba6f7" stroke="#b4befe" stroke-width="2" />
+  </g>
+
+  <!-- Terminal prompt accent: subtle '> _' in muted violet -->
+  <g opacity="0.65" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 72 410 L 92 425 L 72 440" fill="none" stroke="#a6adc8" stroke-width="4" />
+    <line x1="102" y1="440" x2="122" y2="440" stroke="#cba6f7" stroke-width="4" />
+  </g>
+</svg>
