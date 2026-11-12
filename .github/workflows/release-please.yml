@@ -115,7 +115,7 @@ jobs:
 
       - name: Create release tarball
         run: |
-          TARBALL=$(npm pack)
+          TARBALL=$(npm pack --ignore-scripts | tail -n 1)
           echo "TARBALL=$TARBALL" >> "$GITHUB_ENV"
 
       - name: Upload Tarball to GitHub Release
