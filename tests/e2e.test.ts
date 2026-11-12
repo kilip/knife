@@ -429,4 +429,53 @@ describe("Knife End-to-End System Tests", () => {
     });
     expect(deleteFileRes.status).toBe(200);
   });
+
+  it("manages user settings via /api/settings GET and PATCH", async () => {
+    const sessionToken = createSessionToken("testowner", "test-secret-key-e2e");
+    const cookieHeader = `knife_session=${sessionToken}`;
+
+    // 1. Unauthenticated request returns 401
+    const unauthRes = await fetch(`http://127.0.0.1:${testPort}/api/settings`);
+    expect(unauthRes.status).toBe(401);
+
+    // 2. Authenticated GET returns default settings
+    const getRes = await fetch(`http://127.0.0.1:${testPort}/api/settings`, {
+      headers: { Cookie: cookieHeader },
+    });
+    expect(getRes.status).toBe(200);
+    const settings = (await getRes.json()) as { fontSize: number; theme: string };
+    expect(settings.fontSize).toBe(15);
+
+    // 3. Authenticated PATCH updates settings
+    const patchRes = await fetch(`http://127.0.0.1:${testPort}/api/settings`, {
+      method: "PATCH",
+      headers: { Cookie: cookieHeader, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fontSize: 22,
+        theme: "nord",
+        cursorStyle: "underline",
+        compactTabs: true,
+      }),
+    });
+    expect(patchRes.status).toBe(200);
+    const updated = (await patchRes.json()) as {
+      fontSize: number;
+      theme: string;
+      cursorStyle: string;
+      compactTabs: boolean;
+    };
+    expect(updated.fontSize).toBe(22);
+    expect(updated.theme).toBe("nord");
+    expect(updated.cursorStyle).toBe("underline");
+    expect(updated.compactTabs).toBe(true);
+
+    // 4. Re-fetch verify persistence
+    const verifyRes = await fetch(`http://127.0.0.1:${testPort}/api/settings`, {
+      headers: { Cookie: cookieHeader },
+    });
+    expect(verifyRes.status).toBe(200);
+    const persisted = (await verifyRes.json()) as { fontSize: number; theme: string };
+    expect(persisted.fontSize).toBe(22);
+    expect(persisted.theme).toBe("nord");
+  });
 });

@@ -254,6 +254,7 @@ CLI Flags > Environment Variables > config.json > Defaults
 | Double-click tab                                                          | Inline rename active tab                    |
 | <kbd>Ctrl</kbd> + <kbd>E</kbd>                                            | Toggle file browser sidebar                 |
 | <kbd>Ctrl</kbd> + <kbd>H</kbd>                                            | Toggle hidden files in file browser         |
+| <kbd>Ctrl</kbd> / <kbd>Cmd</kbd> + <kbd>,</kbd>                           | Open user settings page                     |
 
 ---
 

@@ -11,7 +11,9 @@ import {
   Folder,
   ArrowUpCircle,
   Command,
+  Settings as SettingsIcon,
 } from "lucide-react";
+import { Link } from "react-router";
 import { StatusIndicator } from "./StatusIndicator";
 import { ThemeSelector } from "./ThemeSelector";
 import { PwaInstallButton } from "./PwaInstallButton";
@@ -53,6 +55,8 @@ interface TabBarProps {
   updateAvailable?: boolean;
   latestVersion?: string;
   onOpenUpdateModal?: () => void;
+  compact?: boolean;
+  onOpenSettings?: () => void;
 }
 
 export function TabBar({
@@ -83,6 +87,8 @@ export function TabBar({
   updateAvailable,
   latestVersion,
   onOpenUpdateModal,
+  compact,
+  onOpenSettings,
 }: TabBarProps) {
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -118,7 +124,9 @@ export function TabBar({
   };
 
   return (
-    <header className="h-11 border-b border-[var(--border)] bg-[var(--bg-surface)] flex items-center justify-between px-2 select-none shrink-0 gap-2">
+    <header
+      className={`${compact ? "h-9 text-xs" : "h-11"} border-b border-[var(--border)] bg-[var(--bg-surface)] flex items-center justify-between px-2 select-none shrink-0 gap-2 transition-all`}
+    >
       {/* Brand & Tabs */}
       <div className="flex items-center gap-1.5 overflow-x-auto h-full scrollbar-none py-1">
         <div className="flex items-center gap-1.5 px-2 text-[var(--accent)] font-bold text-sm tracking-wide mr-1">
@@ -316,6 +324,15 @@ export function TabBar({
           </button>
         )}
 
+        <Link
+          to="/settings"
+          onClick={onOpenSettings}
+          className="p-2 rounded-lg text-[var(--fg-muted)] hover:text-[var(--fg-base)] hover:bg-[var(--bg-hover)] border border-[var(--border)] transition-colors cursor-pointer"
+          title="Settings (Cmd+,)"
+        >
+          <SettingsIcon className="w-3.5 h-3.5" />
+        </Link>
+
         <button
           onClick={() => setShowShortcuts(!showShortcuts)}
           className="p-2 rounded-lg text-[var(--fg-muted)] hover:text-[var(--fg-base)] hover:bg-[var(--bg-hover)] border border-[var(--border)] transition-colors cursor-pointer"
@@ -414,6 +431,12 @@ export function TabBar({
                 <span className="text-[var(--fg-muted)]">Toggle File Browser</span>
                 <kbd className="px-1.5 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border)] font-mono text-[11px]">
                   Ctrl + E
+                </kbd>
+              </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-[var(--fg-muted)]">Settings</span>
+                <kbd className="px-1.5 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border)] font-mono text-[11px]">
+                  Cmd/Ctrl + ,
                 </kbd>
               </div>
             </div>

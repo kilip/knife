@@ -3,7 +3,7 @@ import { join, dirname, basename, resolve, relative, isAbsolute } from "node:pat
 import { loadConfig, saveConfig, parseCliArgs, type KnifeConfig } from "./config";
 import { killSession, getTabCwd } from "./tmux";
 import { getUserShell, getShellName, isTmuxInstalled } from "./shell";
-import { loadTabs, saveTabs, type TabData } from "./storage";
+import { loadTabs, saveTabs, loadSettings, saveSettings, type TabData } from "./storage";
 import {
   generateSetupToken,
   getActiveSetupToken,
@@ -959,6 +959,33 @@ try {
           return Response.json({ theme: config.theme }, { headers: secHeaders });
         }
         return Response.json({ theme: config.theme }, { headers: secHeaders });
+      }
+
+      // User Settings API (/api/settings)
+      if (url.pathname === "/api/settings") {
+        if (!currentSession) {
+          return Response.json({ error: "Unauthorized" }, { status: 401, headers: secHeaders });
+        }
+        if (req.method === "GET") {
+          const settings = loadSettings(config.theme);
+          return Response.json(settings, { headers: secHeaders });
+        }
+        if (req.method === "PATCH") {
+          const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+          if (typeof body !== "object" || body === null || Array.isArray(body)) {
+            return Response.json(
+              { error: "Invalid JSON body" },
+              { status: 400, headers: secHeaders },
+            );
+          }
+          if (typeof body.theme === "string" && body.theme.length > 0) {
+            config.theme = body.theme;
+            saveConfig(config, configPath);
+          }
+          const updated = saveSettings(body, config.theme);
+          return Response.json(updated, { headers: secHeaders });
+        }
+        return new Response("Method Not Allowed", { status: 405, headers: secHeaders });
       }
 
       // 9. Self-Update System API (/api/system/update/*)

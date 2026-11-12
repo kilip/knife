@@ -24,6 +24,13 @@ interface TerminalTabProps {
   isActive: boolean;
   theme: KnifeTheme;
   fontSize?: number;
+  fontFamily?: string;
+  lineHeight?: number;
+  cursorStyle?: "block" | "underline" | "bar";
+  cursorBlink?: boolean;
+  scrollback?: number;
+  copyOnSelect?: boolean;
+  bellStyle?: "none" | "visual" | "sound";
   onStatusChange?: (status: ConnectionStatus) => void;
   onUploadToCwd?: (files: File[]) => void;
   onRegisterActions?: (tabId: string, actions: TerminalActions | null) => void;
@@ -35,6 +42,13 @@ export function TerminalTab({
   isActive,
   theme,
   fontSize,
+  fontFamily,
+  lineHeight,
+  cursorStyle,
+  cursorBlink,
+  scrollback,
+  copyOnSelect,
+  bellStyle,
   onStatusChange,
   onUploadToCwd,
   onRegisterActions,
@@ -150,6 +164,36 @@ export function TerminalTab({
     }
   }, [fontSize]);
 
+  useEffect(() => {
+    if (termRef.current && fontFamily && termRef.current.options.fontFamily !== fontFamily) {
+      termRef.current.options.fontFamily = fontFamily;
+      try {
+        fitAddonRef.current?.fit();
+      } catch {}
+    }
+  }, [fontFamily]);
+
+  useEffect(() => {
+    if (termRef.current && lineHeight && termRef.current.options.lineHeight !== lineHeight) {
+      termRef.current.options.lineHeight = lineHeight;
+      try {
+        fitAddonRef.current?.fit();
+      } catch {}
+    }
+  }, [lineHeight]);
+
+  useEffect(() => {
+    if (termRef.current && cursorStyle) {
+      termRef.current.options.cursorStyle = cursorStyle;
+    }
+  }, [cursorStyle]);
+
+  useEffect(() => {
+    if (termRef.current && cursorBlink !== undefined) {
+      termRef.current.options.cursorBlink = cursorBlink;
+    }
+  }, [cursorBlink]);
+
   const updateStatus = (newStatus: ConnectionStatus) => {
     statusRef.current = newStatus;
     onStatusChangeRef.current?.(newStatus);
@@ -193,13 +237,14 @@ export function TerminalTab({
 
     // 1. Initialize Terminal
     const term = new Terminal({
-      cursorBlink: true,
-      cursorStyle: "block",
+      cursorBlink: cursorBlink ?? true,
+      cursorStyle: cursorStyle ?? "block",
       fontSize: fontSize ?? 15,
-      fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+      fontFamily: fontFamily ?? "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+      lineHeight: lineHeight ?? 1.2,
       theme: theme.terminal,
       allowProposedApi: true,
-      scrollback: 50000,
+      scrollback: scrollback ?? 50000,
     });
     termRef.current = term;
 
@@ -246,6 +291,27 @@ export function TerminalTab({
       }
       return true;
     });
+
+    if (copyOnSelect) {
+      term.onSelectionChange(() => {
+        if (term.hasSelection()) {
+          const selectedText = term.getSelection();
+          if (selectedText) {
+            navigator.clipboard?.writeText(selectedText).catch(() => {});
+          }
+        }
+      });
+    }
+
+    if (bellStyle === "visual") {
+      term.onBell(() => {
+        const el = containerRef.current;
+        if (el) {
+          el.classList.add("opacity-60");
+          setTimeout(() => el.classList.remove("opacity-60"), 100);
+        }
+      });
+    }
     // Let app shortcuts pass through
     term.attachCustomKeyEventHandler((e) => {
       if (
@@ -269,7 +335,8 @@ export function TerminalTab({
           e.key === "-" ||
           e.key === "0" ||
           e.key === "e" ||
-          e.key === "E")
+          e.key === "E" ||
+          e.key === ",")
       ) {
         return false;
       }

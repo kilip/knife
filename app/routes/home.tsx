@@ -11,28 +11,23 @@ import { TransferQueueDrawer } from "~/components/FileBrowser/TransferQueueDrawe
 import { useFileTransfer } from "~/hooks/useFileTransfer";
 import { useSelfUpdate } from "~/hooks/useSelfUpdate";
 import { SelfUpdateModal } from "~/components/SelfUpdateModal";
-import { getTheme, applyTheme, getStoredThemeId, type KnifeTheme } from "~/utils/themes";
+import { useNavigate } from "react-router";
+import { getTheme, type KnifeTheme } from "~/utils/themes";
+import { useSettings } from "~/hooks/useSettings";
 import { getTopLevelDir } from "~/utils/cwd";
 
 export default function Home() {
   const [tabs, setTabs] = useState<TabItem[]>([]);
   const [activeTabId, setActiveTabId] = useState<string>("");
   const [statuses, setStatuses] = useState<Record<string, ConnectionStatus>>({});
-  const [theme, setTheme] = useState<KnifeTheme>(() => getTheme(getStoredThemeId()));
+  const navigate = useNavigate();
+  const { settings, updateSettings } = useSettings();
+  const theme = getTheme(settings.theme);
   const [username, setUsername] = useState<string>("");
   const [shellName, setShellName] = useState<string>("Shell");
   const [tabToClose, setTabToClose] = useState<TabItem | null>(null);
   const customTabsRef = useRef<Set<string>>(new Set());
-  const [fontSize, setFontSize] = useState<number>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("knife_font_size");
-      if (saved) {
-        const parsed = parseInt(saved, 10);
-        if (!isNaN(parsed) && parsed >= 10 && parsed <= 32) return parsed;
-      }
-    }
-    return 15;
-  });
+  const fontSize = settings.fontSize;
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isFileBrowserOpen, setIsFileBrowserOpen] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
@@ -202,30 +197,23 @@ export default function Home() {
   }, []);
 
   const handleIncreaseFontSize = useCallback(() => {
-    setFontSize((prev) => {
-      const next = Math.min(32, prev + 1);
-      localStorage.setItem("knife_font_size", String(next));
-      return next;
-    });
-  }, []);
+    updateSettings({ fontSize: Math.min(32, settings.fontSize + 1) });
+  }, [settings.fontSize, updateSettings]);
 
   const handleDecreaseFontSize = useCallback(() => {
-    setFontSize((prev) => {
-      const next = Math.max(10, prev - 1);
-      localStorage.setItem("knife_font_size", String(next));
-      return next;
-    });
-  }, []);
+    updateSettings({ fontSize: Math.max(10, settings.fontSize - 1) });
+  }, [settings.fontSize, updateSettings]);
 
   const handleResetFontSize = useCallback(() => {
-    setFontSize(15);
-    localStorage.setItem("knife_font_size", "15");
-  }, []);
-  // Initialize theme from storage
-  useEffect(() => {
-    const initialTheme = applyTheme(getStoredThemeId());
-    setTheme(initialTheme);
-  }, []);
+    updateSettings({ fontSize: 15 });
+  }, [updateSettings]);
+
+  const handleSelectTheme = useCallback(
+    (themeId: string) => {
+      updateSettings({ theme: themeId });
+    },
+    [updateSettings],
+  );
 
   // Fetch initial tabs and user profile
   useEffect(() => {
@@ -243,10 +231,6 @@ export default function Home() {
           setUsername(data.username);
           if (data.shellName) {
             setShellName(data.shellName);
-          }
-          if (data.theme) {
-            const serverTheme = applyTheme(data.theme);
-            setTheme(serverTheme);
           }
         }
       })
@@ -312,17 +296,6 @@ export default function Home() {
     const interval = setInterval(syncCwd, 2000);
     return () => clearInterval(interval);
   }, [activeTabId]);
-
-  // Theme changer
-  const handleSelectTheme = (themeId: string) => {
-    const nextTheme = applyTheme(themeId);
-    setTheme(nextTheme);
-    fetch("/api/theme", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ theme: themeId }),
-    }).catch(() => {});
-  };
 
   // Create new tab
   const handleCreateTab = useCallback(() => {
@@ -461,6 +434,13 @@ export default function Home() {
         return;
       }
 
+      // Cmd/Ctrl + ,: Open Settings
+      if ((e.ctrlKey || e.metaKey) && e.key === ",") {
+        e.preventDefault();
+        navigate("/settings");
+        return;
+      }
+
       // Alt + T: New tab
       if (e.altKey && !e.shiftKey && (e.key === "t" || e.key === "T")) {
         e.preventDefault();
@@ -537,6 +517,7 @@ export default function Home() {
         activeTabId={activeTabId}
         statuses={statuses}
         theme={theme}
+        compact={settings.compactTabs}
         fontSize={fontSize}
         onIncreaseFontSize={handleIncreaseFontSize}
         onDecreaseFontSize={handleDecreaseFontSize}
@@ -586,6 +567,13 @@ export default function Home() {
                 isActive={tab.id === activeTabId}
                 theme={theme}
                 fontSize={fontSize}
+                fontFamily={settings.fontFamily}
+                lineHeight={settings.lineHeight}
+                cursorStyle={settings.cursorStyle}
+                cursorBlink={settings.cursorBlink}
+                scrollback={settings.scrollback}
+                copyOnSelect={settings.copyOnSelect}
+                bellStyle={settings.bellStyle}
                 onStatusChange={(status) => {
                   setStatuses((prev) => ({ ...prev, [tab.id]: status }));
                 }}
