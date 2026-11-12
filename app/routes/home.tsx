@@ -12,6 +12,7 @@ import { useFileTransfer } from "~/hooks/useFileTransfer";
 import { useSelfUpdate } from "~/hooks/useSelfUpdate";
 import { SelfUpdateModal } from "~/components/SelfUpdateModal";
 import { getTheme, applyTheme, getStoredThemeId, type KnifeTheme } from "~/utils/themes";
+import { getTopLevelDir } from "~/utils/cwd";
 
 export default function Home() {
   const [tabs, setTabs] = useState<TabItem[]>([]);
@@ -21,6 +22,7 @@ export default function Home() {
   const [username, setUsername] = useState<string>("");
   const [shellName, setShellName] = useState<string>("Shell");
   const [tabToClose, setTabToClose] = useState<TabItem | null>(null);
+  const customTabsRef = useRef<Set<string>>(new Set());
   const [fontSize, setFontSize] = useState<number>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("knife_font_size");
@@ -263,10 +265,53 @@ export default function Home() {
         if (Array.isArray(data) && data.length > 0) {
           setTabs(data);
           setActiveTabId(data[0].id);
+          for (const tab of data) {
+            fetch(`/api/tabs/${tab.id}/cwd`)
+              .then((r) => r.json())
+              .then((d) => {
+                if (d?.cwd) {
+                  const top = getTopLevelDir(d.cwd);
+                  setTabs((prev) =>
+                    prev.map((t) =>
+                      t.id === tab.id && !customTabsRef.current.has(t.id) ? { ...t, name: top } : t,
+                    ),
+                  );
+                }
+              })
+              .catch(() => {});
+          }
         }
       })
       .catch(() => {});
   }, []);
+
+  // Sync active tab title with CWD top-level folder
+  useEffect(() => {
+    if (!activeTabId) return;
+
+    const syncCwd = async () => {
+      try {
+        const res = await fetch(`/api/tabs/${activeTabId}/cwd`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data?.cwd) return;
+
+        const topLevel = getTopLevelDir(data.cwd);
+        setTabs((prev) =>
+          prev.map((t) => {
+            if (t.id !== activeTabId) return t;
+            if (customTabsRef.current.has(t.id)) return t;
+            if (t.name === topLevel) return t;
+            return { ...t, name: topLevel };
+          }),
+        );
+      } catch {}
+    };
+
+    syncCwd();
+    const interval = setInterval(syncCwd, 2000);
+    return () => clearInterval(interval);
+  }, [activeTabId]);
 
   // Theme changer
   const handleSelectTheme = (themeId: string) => {
@@ -290,6 +335,7 @@ export default function Home() {
       .then((res) => res.json())
       .then((newTab: TabItem) => {
         if (newTab && newTab.id) {
+          customTabsRef.current.delete(newTab.id);
           setTabs((prev) => [...prev, newTab]);
           setActiveTabId(newTab.id);
         }
@@ -312,6 +358,7 @@ export default function Home() {
   const handleConfirmCloseTab = () => {
     if (!tabToClose) return;
     const closedId = tabToClose.id;
+    customTabsRef.current.delete(closedId);
     terminalActionsRef.current.delete(closedId);
     setTabToClose(null);
     fetch(`/api/tabs/${closedId}`, {
@@ -340,6 +387,7 @@ export default function Home() {
 
   // Rename tab
   const handleRenameTab = (id: string, newName: string) => {
+    customTabsRef.current.add(id);
     fetch(`/api/tabs/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
