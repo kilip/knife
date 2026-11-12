@@ -111,6 +111,7 @@ public/               PWA manifest and icons
 - **Do not hand-edit** `CHANGELOG.md`, the `version` in `package.json`, or `.github/.release-please-manifest.json`; release-please owns them.
 - Tags have no component prefix (`include-component-in-tag: false`).
 - The published package ships only: `bin`, `build`, `server`, `public`, `README.md`, `LICENSE`. If you add a runtime directory, add it to `files` in `package.json`.
+- **PRs and issues must use templates:** create pull requests using `.github/pull_request_template.md` and issues using the appropriate template in `.github/ISSUE_TEMPLATE/` (`bug_report.md` or `feature_request.md`). Complete all sections and checklist items.
 
 ## Before you finish
 
@@ -119,3 +120,4 @@ public/               PWA manifest and icons
 2. No secrets, `config.json`, or `data/` in the diff.
 3. User-facing behavior changes are reflected in `README.md` (CLI flags, env vars, shortcuts, architecture).
 4. Commit message follows `type: <emoji> subject` (Conventional Commits + Unicode emoji).
+5. PR description created using `.github/pull_request_template.md`.
