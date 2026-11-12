@@ -39,6 +39,14 @@ describe("Server Config & CLI Parser", () => {
     expect(parsed.host).toBe("192.168.1.50");
     expect(parsed.port).toBe(4000);
   });
+  it("captures unknown arguments and commands", () => {
+    const parsed = parseCliArgs(["doctor"]);
+    expect(parsed.unknown).toEqual(["doctor"]);
+
+    const parsedMixed = parseCliArgs(["--port", "3000", "bogus", "--foo"]);
+    expect(parsedMixed.port).toBe(3000);
+    expect(parsedMixed.unknown).toEqual(["bogus", "--foo"]);
+  });
 
   it("validates IPv4, IPv6, localhost, and 0.0.0.0 hosts", () => {
     expect(validateHost("127.0.0.1")).toBe(true);

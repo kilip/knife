@@ -56,6 +56,7 @@ export function parseCliArgs(args: string[]): {
   domain?: string;
   configPath?: string;
   help?: boolean;
+  unknown?: string[];
 } {
   const result: {
     host?: string;
@@ -63,7 +64,9 @@ export function parseCliArgs(args: string[]): {
     domain?: string;
     configPath?: string;
     help?: boolean;
+    unknown?: string[];
   } = {};
+  const unknown: string[] = [];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === "-h" || arg === "--help") {
@@ -84,7 +87,13 @@ export function parseCliArgs(args: string[]): {
       result.domain = args[++i];
     } else if (arg.startsWith("--domain=")) {
       result.domain = arg.slice("--domain=".length);
+    } else {
+      unknown.push(arg);
     }
+  }
+
+  if (unknown.length > 0) {
+    result.unknown = unknown;
   }
 
   return result;

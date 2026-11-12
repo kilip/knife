@@ -59,6 +59,14 @@ describe("Service CLI Argument Parsing", () => {
     expect(parseServiceCliArgs(["--port", "3000"])).toBeNull();
     expect(parseServiceCliArgs(["--help"])).toBeNull();
   });
+  it("throws on invalid service actions", () => {
+    expect(() => parseServiceCliArgs(["service", "doctor"])).toThrow(
+      "Unknown service action 'doctor'",
+    );
+    expect(() => parseServiceCliArgs(["service:invalid"])).toThrow(
+      "Unknown service action 'invalid'",
+    );
+  });
 
   it("parses space-separated service commands", () => {
     const opts = parseServiceCliArgs(["service", "install", "--port", "8080", "--system"]);

@@ -71,6 +71,10 @@ export function parseServiceCliArgs(args: string[]): ServiceCliOptions | null {
     const rawAction = first.slice("service:".length).toLowerCase() as ServiceAction;
     if (VALID_ACTIONS.includes(rawAction)) {
       action = rawAction;
+    } else {
+      throw new Error(
+        `Unknown service action '${rawAction}'. Valid actions: ${VALID_ACTIONS.join(", ")}`,
+      );
     }
   } else if (first === "service") {
     if (remainingArgs.length > 0 && !remainingArgs[0].startsWith("-")) {
@@ -78,6 +82,10 @@ export function parseServiceCliArgs(args: string[]): ServiceCliOptions | null {
       if (VALID_ACTIONS.includes(rawAction)) {
         action = rawAction;
         remainingArgs = remainingArgs.slice(1);
+      } else {
+        throw new Error(
+          `Unknown service action '${rawAction}'. Valid actions: ${VALID_ACTIONS.join(", ")}`,
+        );
       }
     } else {
       // "knife service" with no action or with flags like --help

@@ -50,11 +50,6 @@ try {
   process.exit(1);
 }
 
-// Tmux is optional; direct user shell is the primary terminal mode
-if (!isTmuxInstalled()) {
-  console.log("[server] tmux is not installed. Direct user shell mode is active.");
-}
-
 // Parse CLI arguments and load configuration
 const cliArgs = parseCliArgs(process.argv.slice(2));
 if (cliArgs.help) {
@@ -74,6 +69,16 @@ Options:
   process.exit(0);
 }
 
+if (cliArgs.unknown && cliArgs.unknown.length > 0) {
+  console.error(`\x1b[31mError:\x1b[0m Unknown command or argument: ${cliArgs.unknown.join(" ")}`);
+  console.error("Run 'knife --help' for usage.");
+  process.exit(1);
+}
+
+// Tmux is optional; direct user shell is the primary terminal mode
+if (!isTmuxInstalled()) {
+  console.log("[server] tmux is not installed. Direct user shell mode is active.");
+}
 let { config, isFirstRun, configPath } = loadConfig(cliArgs);
 
 // Initialize tabs from persistent storage
