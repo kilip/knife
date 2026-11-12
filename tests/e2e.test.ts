@@ -478,4 +478,28 @@ describe("Knife End-to-End System Tests", () => {
     expect(persisted.fontSize).toBe(22);
     expect(persisted.theme).toBe("nord");
   });
+
+  it("allows deleting all tabs down to zero tabs without auto-creating a new tab", async () => {
+    const sessionToken = createSessionToken("testowner", "test-secret-key-e2e");
+    const cookieHeader = `knife_session=${sessionToken}`;
+
+    const tabsRes = await fetch(`http://127.0.0.1:${testPort}/api/tabs`, {
+      headers: { Cookie: cookieHeader },
+    });
+    const tabs = (await tabsRes.json()) as Array<{ id: string }>;
+
+    for (const tab of tabs) {
+      const delRes = await fetch(`http://127.0.0.1:${testPort}/api/tabs/${tab.id}`, {
+        method: "DELETE",
+        headers: { Cookie: cookieHeader },
+      });
+      expect(delRes.status).toBe(200);
+    }
+
+    const checkRes = await fetch(`http://127.0.0.1:${testPort}/api/tabs`, {
+      headers: { Cookie: cookieHeader },
+    });
+    const checkTabs = (await checkRes.json()) as Array<{ id: string }>;
+    expect(checkTabs.length).toBe(0);
+  });
 });

@@ -3,7 +3,14 @@ import { join, dirname, basename, resolve, relative, isAbsolute } from "node:pat
 import { loadConfig, saveConfig, parseCliArgs, type KnifeConfig } from "./config";
 import { killSession, getTabCwd } from "./tmux";
 import { getUserShell, getShellName, isTmuxInstalled } from "./shell";
-import { loadTabs, saveTabs, loadSettings, saveSettings, type TabData } from "./storage";
+import {
+  loadTabs,
+  saveTabs,
+  getTabsPath,
+  loadSettings,
+  saveSettings,
+  type TabData,
+} from "./storage";
 import {
   generateSetupToken,
   getActiveSetupToken,
@@ -83,7 +90,7 @@ let { config, isFirstRun, configPath } = loadConfig(cliArgs);
 
 // Initialize tabs from persistent storage
 let currentTabs = loadTabs();
-if (currentTabs.length === 0) {
+if (currentTabs.length === 0 && !existsSync(getTabsPath())) {
   const shellName = getShellName();
   const initialId = crypto.randomUUID().slice(0, 8);
   currentTabs.push({
@@ -619,20 +626,6 @@ try {
             killSession(deletedTab.sessionName);
           }
           currentTabs.splice(tabIndex, 1);
-
-          // If no tabs left, automatically create a new one
-          if (currentTabs.length === 0) {
-            const newId = crypto.randomUUID().slice(0, 8);
-            const shellName = getShellName();
-            const newSession = `knife-${newId}`;
-            currentTabs.push({
-              id: newId,
-              name: `${shellName} 1`,
-              sessionName: newSession,
-              order: 0,
-              createdAt: Date.now(),
-            });
-          }
 
           // Re-index orders
           currentTabs.forEach((t, i) => (t.order = i));

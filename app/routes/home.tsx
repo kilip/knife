@@ -15,6 +15,7 @@ import { useNavigate } from "react-router";
 import { getTheme, type KnifeTheme } from "~/utils/themes";
 import { useSettings } from "~/hooks/useSettings";
 import { getTopLevelDir } from "~/utils/cwd";
+import { Plus } from "lucide-react";
 
 export default function Home() {
   const [tabs, setTabs] = useState<TabItem[]>([]);
@@ -27,6 +28,7 @@ export default function Home() {
   const [shellName, setShellName] = useState<string>("Shell");
   const [tabToClose, setTabToClose] = useState<TabItem | null>(null);
   const customTabsRef = useRef<Set<string>>(new Set());
+  const closingTabsRef = useRef<Set<string>>(new Set());
   const fontSize = settings.fontSize;
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isFileBrowserOpen, setIsFileBrowserOpen] = useState<boolean>(() => {
@@ -246,23 +248,27 @@ export default function Home() {
         return res.json();
       })
       .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           setTabs(data);
-          setActiveTabId(data[0].id);
-          for (const tab of data) {
-            fetch(`/api/tabs/${tab.id}/cwd`)
-              .then((r) => r.json())
-              .then((d) => {
-                if (d?.cwd) {
-                  const top = getTopLevelDir(d.cwd);
-                  setTabs((prev) =>
-                    prev.map((t) =>
-                      t.id === tab.id && !customTabsRef.current.has(t.id) ? { ...t, name: top } : t,
-                    ),
-                  );
-                }
-              })
-              .catch(() => {});
+          if (data.length > 0) {
+            setActiveTabId(data[0].id);
+            for (const tab of data) {
+              fetch(`/api/tabs/${tab.id}/cwd`)
+                .then((r) => r.json())
+                .then((d) => {
+                  if (d?.cwd) {
+                    const top = getTopLevelDir(d.cwd);
+                    setTabs((prev) =>
+                      prev.map((t) =>
+                        t.id === tab.id && !customTabsRef.current.has(t.id)
+                          ? { ...t, name: top }
+                          : t,
+                      ),
+                    );
+                  }
+                })
+                .catch(() => {});
+            }
           }
         }
       })
@@ -327,36 +333,71 @@ export default function Home() {
     [tabs],
   );
 
+  // Execute tab close
+  const executeCloseTab = useCallback(
+    (closedId: string) => {
+      if (closingTabsRef.current.has(closedId)) return;
+      closingTabsRef.current.add(closedId);
+
+      customTabsRef.current.delete(closedId);
+      terminalActionsRef.current.delete(closedId);
+      setTabToClose((prev) => (prev?.id === closedId ? null : prev));
+
+      // Calculate adjacent active tab before deletion
+      let nextActiveId = activeTabId;
+      if (activeTabId === closedId) {
+        const index = tabs.findIndex((t) => t.id === closedId);
+        if (index > 0) {
+          nextActiveId = tabs[index - 1].id;
+        } else if (tabs.length > 1) {
+          nextActiveId = tabs[1].id;
+        } else {
+          nextActiveId = "";
+        }
+      }
+
+      fetch(`/api/tabs/${closedId}`, {
+        method: "DELETE",
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data.remainingTabs)) {
+            setTabs(data.remainingTabs);
+            if (activeTabId === closedId) {
+              const exists = data.remainingTabs.some((t: TabItem) => t.id === nextActiveId);
+              setActiveTabId(exists ? nextActiveId : data.remainingTabs[0]?.id || "");
+            }
+          } else {
+            setTabs((prev) => {
+              const next = prev.filter((t) => t.id !== closedId);
+              if (activeTabId === closedId) {
+                const exists = next.some((t) => t.id === nextActiveId);
+                setActiveTabId(exists ? nextActiveId : next[0]?.id || "");
+              }
+              return next;
+            });
+          }
+        })
+        .catch((err) => console.error("Failed to delete tab:", err))
+        .finally(() => {
+          closingTabsRef.current.delete(closedId);
+        });
+    },
+    [activeTabId, tabs],
+  );
+
   // Confirm tab close
   const handleConfirmCloseTab = () => {
     if (!tabToClose) return;
-    const closedId = tabToClose.id;
-    customTabsRef.current.delete(closedId);
-    terminalActionsRef.current.delete(closedId);
-    setTabToClose(null);
-    fetch(`/api/tabs/${closedId}`, {
-      method: "DELETE",
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data.remainingTabs)) {
-          setTabs(data.remainingTabs);
-          if (activeTabId === closedId) {
-            const nextActive = data.remainingTabs[0]?.id || "";
-            setActiveTabId(nextActive);
-          }
-        } else {
-          setTabs((prev) => {
-            const next = prev.filter((t) => t.id !== closedId);
-            if (activeTabId === closedId && next.length > 0) {
-              setActiveTabId(next[0].id);
-            }
-            return next;
-          });
-        }
-      })
-      .catch((err) => console.error("Failed to delete tab:", err));
+    executeCloseTab(tabToClose.id);
   };
+
+  const handleProcessExit = useCallback(
+    (tabId: string) => {
+      executeCloseTab(tabId);
+    },
+    [executeCloseTab],
+  );
 
   // Rename tab
   const handleRenameTab = (id: string, newName: string) => {
@@ -574,6 +615,7 @@ export default function Home() {
                 scrollback={settings.scrollback}
                 copyOnSelect={settings.copyOnSelect}
                 bellStyle={settings.bellStyle}
+                onProcessExit={handleProcessExit}
                 onStatusChange={(status) => {
                   setStatuses((prev) => ({ ...prev, [tab.id]: status }));
                 }}
@@ -583,8 +625,16 @@ export default function Home() {
             ))}
 
             {tabs.length === 0 && (
-              <div className="flex items-center justify-center h-full text-sm text-[var(--fg-muted)]">
-                No active tabs. Click &quot;+&quot; to open a new terminal tab.
+              <div className="flex flex-col items-center justify-center h-full gap-3 text-[var(--fg-muted)]">
+                <p className="text-sm">No active tabs</p>
+                <button
+                  type="button"
+                  onClick={handleCreateTab}
+                  className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium rounded-lg bg-[var(--accent)] text-[var(--bg-base)] hover:opacity-90 transition-opacity cursor-pointer shadow-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  New Terminal
+                </button>
               </div>
             )}
           </main>

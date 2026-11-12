@@ -31,6 +31,7 @@ interface TerminalTabProps {
   scrollback?: number;
   copyOnSelect?: boolean;
   bellStyle?: "none" | "visual" | "sound";
+  onProcessExit?: (tabId: string, exitCode: number) => void;
   onStatusChange?: (status: ConnectionStatus) => void;
   onUploadToCwd?: (files: File[]) => void;
   onRegisterActions?: (tabId: string, actions: TerminalActions | null) => void;
@@ -49,6 +50,7 @@ export function TerminalTab({
   scrollback,
   copyOnSelect,
   bellStyle,
+  onProcessExit,
   onStatusChange,
   onUploadToCwd,
   onRegisterActions,
@@ -143,6 +145,10 @@ export function TerminalTab({
   useEffect(() => {
     onStatusChangeRef.current = onStatusChange;
   }, [onStatusChange]);
+  const onProcessExitRef = useRef(onProcessExit);
+  useEffect(() => {
+    onProcessExitRef.current = onProcessExit;
+  }, [onProcessExit]);
   // Keep latest isActive ref for observers and callbacks
   const isActiveRef = useRef(isActive);
   useEffect(() => {
@@ -418,6 +424,7 @@ export function TerminalTab({
             term.writeln(`\r\n\x1b[90m[Process completed with exit code ${exitCode}]\x1b[0m`);
             shouldReconnect = false;
             updateStatus("disconnected");
+            onProcessExitRef.current?.(tabId, exitCode);
           }
         } catch {
           // Plain string fallback
