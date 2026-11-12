@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/kilip/knife/compare/v0.3.0...v0.3.1) (2026-11-12)
+
+
+### Miscellaneous Chores
+
+* [RUN] release 0.3.1 ([91394bf](https://github.com/kilip/knife/commit/91394bff3fcdf98f057420870e360e0bdf384320))
+
 ## 0.3.0 (2026-11-12)
 
 
