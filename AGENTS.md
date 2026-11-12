@@ -98,9 +98,10 @@ public/               PWA manifest and icons
 
 ## Commits, versioning, releases
 
-- **Conventional Commits are required**, with a Unicode emoji at the start of the subject: `<type>[(scope)]: <emoji> <subject>`. release-please generates the changelog and version from them, and it only parses the `type` prefix, so the emoji is safe.
+- **Conventional Commits are required**, with a Unicode emoji at the start of the subject: `<type>: <emoji> <subject>` (scope is forbidden). release-please generates the changelog and version from them, and it only parses the `type` prefix, so the emoji is safe.
   - Examples: `feat: ✨ add quick keys toolbar`, `fix: 🐛 use relative redirect paths`, `chore: 🔧 bump deps`, `feat!: 💥 drop tmux requirement`.
   - Use a real Unicode character (not a `:shortcode:`), exactly one emoji, then a single space, then a lowercase imperative subject.
+  - Do not use scopes (`feat(scope):` will fail commitlint; use `feat:`).
   - The emoji always comes _after_ `type:`, never before the type.
   - Keep the whole subject line (including `type:` and the emoji) at **80 characters or fewer**.
   - Enforced locally by **Husky** git hooks + **commitlint**. Never bypass hooks (`--no-verify`); fix the message instead.
