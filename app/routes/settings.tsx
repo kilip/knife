@@ -13,9 +13,13 @@ import {
   CheckCircle2,
   Loader2,
   AlertTriangle,
+  RefreshCw,
+  ArrowUpCircle,
 } from "lucide-react";
 import { THEMES } from "~/utils/themes";
 import { useSettings, FONT_PRESETS } from "~/hooks/useSettings";
+import { useSelfUpdate } from "~/hooks/useSelfUpdate";
+import { SelfUpdateModal } from "~/components/SelfUpdateModal";
 
 type SettingsTab = "appearance" | "terminal" | "behavior" | "system";
 
@@ -41,6 +45,21 @@ export default function SettingsPage() {
   const [customFontInput, setCustomFontInput] = useState("");
   const [isCustomFont, setIsCustomFont] = useState(false);
 
+  const {
+    status: selfUpdateStatus,
+    updateInfo,
+    logs: selfUpdateLogs,
+    error: selfUpdateError,
+    remediationCommand,
+    isModalOpen: isSelfUpdateModalOpen,
+    reconnectCountdown,
+    checkForUpdate,
+    applyUpdate,
+    openModal: openSelfUpdateModal,
+    closeModal: closeSelfUpdateModal,
+  } = useSelfUpdate();
+
+  const isBusyUpdating = selfUpdateStatus === "updating" || selfUpdateStatus === "restarting";
   // Check if current font matches any preset
   useEffect(() => {
     const isPreset = FONT_PRESETS.some((p) => p.value === settings.fontFamily);
@@ -69,17 +88,21 @@ export default function SettingsPage() {
       .catch(() => {});
   }, []);
 
-  // Keyboard shortcut: Esc to return to terminal
+  // Keyboard shortcut: Esc to return to terminal (guarded while update active)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !showResetConfirm) {
-        e.preventDefault();
-        navigate("/");
+      if (e.key === "Escape" && !showResetConfirm && !isBusyUpdating) {
+        if (isSelfUpdateModalOpen) {
+          closeSelfUpdateModal();
+        } else {
+          e.preventDefault();
+          navigate("/");
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [navigate, showResetConfirm]);
+  }, [navigate, showResetConfirm, isBusyUpdating, isSelfUpdateModalOpen, closeSelfUpdateModal]);
 
   const handleCustomFontSubmit = useCallback(() => {
     const trimmed = customFontInput.trim();
@@ -143,19 +166,30 @@ export default function SettingsPage() {
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
+              const hasBadge = item.id === "system" && updateInfo?.updateAvailable;
               return (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => setActiveTab(item.id)}
-                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all shrink-0 cursor-pointer text-left ${
+                  className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all shrink-0 cursor-pointer text-left ${
                     isActive
                       ? "bg-[var(--accent)] text-white shadow-xs font-semibold"
                       : "text-[var(--fg-muted)] hover:text-[var(--fg-base)] hover:bg-[var(--bg-hover)]"
                   }`}
                 >
-                  <Icon className="w-4 h-4 shrink-0" />
-                  <span>{item.label}</span>
+                  <div className="flex items-center gap-2.5">
+                    <Icon className="w-4 h-4 shrink-0" />
+                    <span>{item.label}</span>
+                  </div>
+                  {hasBadge && (
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        isActive ? "bg-white" : "bg-[var(--accent)]"
+                      } animate-pulse`}
+                      title="Update available"
+                    />
+                  )}
                 </button>
               );
             })}
@@ -734,30 +768,106 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                {/* Server Info Card */}
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-5 space-y-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--fg-muted)]">
-                    Host Daemon
-                  </h3>
+                {/* Server Info & Updates Card */}
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-5 space-y-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--fg-muted)]">
+                        Host Daemon
+                      </h3>
+                      <p className="text-xs text-[var(--fg-muted)] mt-0.5">
+                        Runtime process status and version management.
+                      </p>
+                    </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    <div className="p-3 rounded-lg bg-[var(--bg-base)] border border-[var(--border)]">
-                      <span className="text-[var(--fg-muted)] block text-[11px]">
-                        Knife Version
+                    {/* Check / Status Action */}
+                    <button
+                      type="button"
+                      disabled={selfUpdateStatus === "checking" || isBusyUpdating}
+                      onClick={() => checkForUpdate(true)}
+                      className="px-2.5 py-1.5 rounded-lg border border-[var(--border)] text-xs text-[var(--fg-muted)] hover:text-[var(--fg-base)] hover:bg-[var(--bg-hover)] transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Check npm registry for updates"
+                    >
+                      <RefreshCw
+                        className={`w-3.5 h-3.5 ${
+                          selfUpdateStatus === "checking" ? "animate-spin text-[var(--accent)]" : ""
+                        }`}
+                      />
+                      <span>
+                        {selfUpdateStatus === "checking" ? "Checking..." : "Check for updates"}
                       </span>
-                      <span className="font-mono font-medium">
-                        v{systemInfo?.version || "1.0.0"}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                    <div className="p-3 rounded-lg bg-[var(--bg-base)] border border-[var(--border)] flex flex-col justify-between">
+                      <span className="text-[var(--fg-muted)] block text-[11px]">
+                        Installed Version
+                      </span>
+                      <span className="font-mono font-medium mt-1">
+                        v{updateInfo?.currentVersion || systemInfo?.version || "1.0.0"}
                       </span>
                     </div>
-                    <div className="p-3 rounded-lg bg-[var(--bg-base)] border border-[var(--border)]">
+
+                    <div className="p-3 rounded-lg bg-[var(--bg-base)] border border-[var(--border)] flex flex-col justify-between">
                       <span className="text-[var(--fg-muted)] block text-[11px]">
                         Runtime Daemon
                       </span>
-                      <span className="font-mono font-medium text-[var(--status-ok)]">
-                        ● Healthy
+                      <span className="font-mono font-medium text-[var(--status-ok)] mt-1 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-[var(--status-ok)] inline-block" />
+                        Healthy
+                      </span>
+                    </div>
+
+                    <div className="p-3 rounded-lg bg-[var(--bg-base)] border border-[var(--border)] flex flex-col justify-between">
+                      <span className="text-[var(--fg-muted)] block text-[11px]">Process Mode</span>
+                      <span className="font-mono font-medium text-[var(--fg-base)] mt-1">
+                        {updateInfo?.isService ? "OS Service" : "Standalone Daemon"}
                       </span>
                     </div>
                   </div>
+
+                  {/* Update Status Banner */}
+                  {updateInfo?.updateAvailable ? (
+                    <div className="p-4 rounded-lg bg-[var(--accent)]/10 border border-[var(--accent)]/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <ArrowUpCircle className="w-5 h-5 text-[var(--accent)] shrink-0" />
+                        <div>
+                          <div className="text-xs font-semibold text-[var(--fg-base)] flex items-center gap-2">
+                            <span>Update Available</span>
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-[var(--accent)] text-white">
+                              v{updateInfo.latestVersion}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-[var(--fg-muted)] mt-0.5">
+                            New version available on npm registry (@kilip/knife).
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={openSelfUpdateModal}
+                        className="w-full sm:w-auto px-3.5 py-1.5 rounded-lg bg-[var(--accent)] text-white hover:opacity-90 font-medium text-xs transition-opacity cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
+                      >
+                        <ArrowUpCircle className="w-3.5 h-3.5" />
+                        <span>Update Knife Now</span>
+                      </button>
+                    </div>
+                  ) : selfUpdateStatus === "up-to-date" ? (
+                    <div className="p-3 rounded-lg bg-[var(--bg-base)] border border-[var(--border)] flex items-center gap-2 text-xs text-[var(--fg-muted)]">
+                      <CheckCircle2 className="w-4 h-4 text-[var(--status-ok)] shrink-0" />
+                      <span>
+                        Knife is up to date (v
+                        {updateInfo?.currentVersion || systemInfo?.version || "1.0.0"}).
+                      </span>
+                    </div>
+                  ) : selfUpdateStatus === "error" && selfUpdateError ? (
+                    <div className="p-3 rounded-lg bg-[var(--status-err)]/10 border border-[var(--status-err)]/30 flex items-center gap-2 text-xs text-[var(--status-err)]">
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      <span>{selfUpdateError}</span>
+                    </div>
+                  ) : null}
                 </div>
 
                 {/* Danger Zone */}
@@ -828,6 +938,20 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+
+      {/* Host Daemon Self-Update Modal */}
+      <SelfUpdateModal
+        isOpen={isSelfUpdateModalOpen}
+        status={selfUpdateStatus}
+        updateInfo={updateInfo}
+        logs={selfUpdateLogs}
+        error={selfUpdateError}
+        remediationCommand={remediationCommand}
+        reconnectCountdown={reconnectCountdown}
+        onClose={closeSelfUpdateModal}
+        onApplyUpdate={applyUpdate}
+        onCheckForUpdate={checkForUpdate}
+      />
     </div>
   );
 }
