@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/kilip/knife/compare/v0.3.1...v0.4.0) (2026-11-13)
+
+
+### Features
+
+* ✨ add host daemon update to settings page ([09abda8](https://github.com/kilip/knife/commit/09abda8de084877b3094e9fea997e30045523c2c))
+* ✨ auto close tab on process exit and allow empty tabs ([323596b](https://github.com/kilip/knife/commit/323596bcab1eb18b5f8767c27c82305986b75e9c))
+
 ## [0.3.1](https://github.com/kilip/knife/compare/v0.3.0...v0.3.1) (2026-11-12)
 
 
