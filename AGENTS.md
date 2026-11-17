@@ -68,10 +68,10 @@ Commit only when asked. When you do, make every commit **atomic**:
 - **Split large work** into a sequence of small commits instead of one big one.
 - **Keep history linear.** No merge commits: rebase onto the base branch (`git pull --rebase`) and fast-forward or squash-merge PRs. Rebase only your own unpublished commits.
 
-Message format (Conventional Commits + emoji, enforced by Husky + commitlint; never use `--no-verify`):
+Message format (Conventional Commits, enforced by Husky + commitlint; never use `--no-verify`):
 
-- `<type>: <emoji> <subject>`, e.g. `feat: ✨ add quick keys toolbar`, `fix: 🐛 use relative redirect paths`.
-- No scope. Exactly one real Unicode emoji, after `type:`. Lowercase imperative subject. Whole line <= 80 characters.
+- `<type>: <subject>`, e.g. `feat: add quick keys toolbar`, `fix: use relative redirect paths`.
+- No scope. Lowercase imperative subject. Whole line <= 80 characters.
 - Breaking changes: `feat!:` or a `BREAKING CHANGE:` footer.
 - Do not hand-edit `CHANGELOG.md`, `version` in `package.json`, or `.github/.release-please-manifest.json`; release-please owns them.
 - PRs and issues must use the templates in `.github/`.
