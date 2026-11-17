@@ -1,6 +1,37 @@
 import { readlinkSync } from "node:fs";
 import { getUserShell } from "./shell";
 
+export const MAX_PTY_BUFFER_SIZE = 128 * 1024; // 128 KB rolling buffer
+
+/**
+ * Decode a raw PTY byte chunk using a streaming UTF-8 TextDecoder so
+ * multi-byte characters split across chunks are preserved intact.
+ */
+export function decodePtyChunk(decoder: TextDecoder, chunk: Uint8Array): string {
+  return decoder.decode(chunk, { stream: true });
+}
+
+/**
+ * Append a decoded chunk to the rolling output buffer and trim to maxSize
+ * without leaving an orphaned UTF-16 low surrogate at the cut boundary.
+ */
+export function appendRollingBuffer(
+  buffer: string,
+  chunk: string,
+  maxSize: number = MAX_PTY_BUFFER_SIZE,
+): string {
+  const combined = buffer + chunk;
+  if (combined.length <= maxSize) {
+    return combined;
+  }
+  let start = combined.length - maxSize;
+  const firstCode = combined.charCodeAt(start);
+  if (firstCode >= 0xdc00 && firstCode <= 0xdfff) {
+    start += 1;
+  }
+  return combined.slice(start);
+}
+
 export interface PtySessionOptions {
   sessionName: string;
   cols?: number;
@@ -17,7 +48,8 @@ export class PtySession {
   public readonly sessionName: string;
   private isClosed: boolean = false;
   private outputBuffer: string = "";
-  private readonly maxBufferSize: number = 128 * 1024; // 128 KB rolling buffer
+  private readonly maxBufferSize: number = MAX_PTY_BUFFER_SIZE;
+  private readonly decoder = new TextDecoder("utf-8");
   private onData?: (data: string) => void;
   private onExit?: (code: number) => void;
 
@@ -36,14 +68,11 @@ export class PtySession {
       rows: initialRows,
       data: (_term, data) => {
         if (!this.isClosed) {
-          const str = data.toString();
-          this.outputBuffer += str;
-          if (this.outputBuffer.length > this.maxBufferSize) {
-            this.outputBuffer = this.outputBuffer.slice(
-              this.outputBuffer.length - this.maxBufferSize,
-            );
+          const str = decodePtyChunk(this.decoder, data);
+          if (str.length > 0) {
+            this.outputBuffer = appendRollingBuffer(this.outputBuffer, str, this.maxBufferSize);
+            this.onData?.(str);
           }
-          this.onData?.(str);
         }
       },
     });
