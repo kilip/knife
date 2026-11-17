@@ -1,0 +1,44 @@
+#!/usr/bin/env sh
+# fix-emoji: prepend unicode emoji to subject if missing
+FILE="$1"
+[ -f "$FILE" ] || exit 0
+
+FIRST_LINE=$(head -n 1 "$FILE")
+
+# match <type>[!]: <rest>
+TYPE=$(printf "%s" "$FIRST_LINE" | sed -E -n 's/^([a-z]+)(!?): *(.*)$/\1/p')
+BANG=$(printf "%s" "$FIRST_LINE" | sed -E -n 's/^([a-z]+)(!?): *(.*)$/\2/p')
+REST=$(printf "%s" "$FIRST_LINE" | sed -E -n 's/^([a-z]+)(!?): *(.*)$/\3/p')
+
+[ -n "$TYPE" ] || exit 0
+
+case "$TYPE" in
+  feat)     EMOJI="✨" ;;
+  fix)      EMOJI="🐛" ;;
+  docs)     EMOJI="📝" ;;
+  style)    EMOJI="💄" ;;
+  refactor) EMOJI="♻️" ;;
+  perf)     EMOJI="⚡️" ;;
+  test)     EMOJI="✅" ;;
+  build)    EMOJI="📦️" ;;
+  ci)       EMOJI="👷" ;;
+  chore)    EMOJI="🔧" ;;
+  revert)   EMOJI="⏪️" ;;
+  *)        exit 0 ;;
+esac
+
+# skip if rest already starts with emoji
+case "$REST" in
+  "$EMOJI"*) exit 0 ;;
+  [\=\<\>]*|[\xa0-\xff]*) ;; # ponytail: handle basic shell patterns or fall through
+esac
+
+# check if first char in rest is non-ascii unicode emoji
+if printf "%s" "$REST" | grep -q -P '^\x{a9}|\x{ae}|[\x{2000}-\x{3300}]|[\x{1f000}-\x{1fbff}]'; then
+  exit 0
+fi
+
+NEW_FIRST_LINE="$TYPE$BANG: $EMOJI $REST"
+REST_OF_FILE=$(tail -n +2 "$FILE")
+printf "%s\n" "$NEW_FIRST_LINE" > "$FILE"
+[ -z "$REST_OF_FILE" ] || printf "%s\n" "$REST_OF_FILE" >> "$FILE"
