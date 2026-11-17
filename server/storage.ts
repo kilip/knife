@@ -1,5 +1,12 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { resolveConfigPath } from "./config";
 
 export interface TabData {
@@ -59,6 +66,32 @@ export function getTabsPath(): string {
   return join(resolveDataDir(), "tabs.json");
 }
 
+function isValidTabEntry(entry: unknown): entry is TabData {
+  if (typeof entry !== "object" || entry === null) {
+    return false;
+  }
+  const candidate = entry as Record<string, unknown>;
+  return (
+    typeof candidate.id === "string" &&
+    typeof candidate.name === "string" &&
+    typeof candidate.order === "number" &&
+    Number.isFinite(candidate.order)
+  );
+}
+
+function quarantineCorruptTabs(tabsPath: string): void {
+  const corruptPath = `${tabsPath}.corrupt-${Date.now()}`;
+  try {
+    renameSync(tabsPath, corruptPath);
+    console.warn(`[storage] Invalid or unreadable tabs.json; moved to ${basename(corruptPath)}`);
+  } catch (renameErr) {
+    console.warn(
+      `[storage] Invalid or unreadable tabs.json; failed to rename to ${basename(corruptPath)}:`,
+      renameErr,
+    );
+  }
+}
+
 export function loadTabs(): TabData[] {
   const tabsPath = getTabsPath();
   if (!existsSync(tabsPath)) {
@@ -66,34 +99,53 @@ export function loadTabs(): TabData[] {
   }
   try {
     const raw = readFileSync(tabsPath, "utf-8");
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed
-        .map(({ id, name, order, createdAt }) => ({ id, name, order, createdAt }))
-        .sort((a, b) => a.order - b.order);
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      quarantineCorruptTabs(tabsPath);
+      return [];
     }
-  } catch (e) {
-    console.error("Error reading tabs.json:", e);
+    return parsed
+      .filter(isValidTabEntry)
+      .map(({ id, name, order, createdAt }) => ({
+        id,
+        name,
+        order,
+        createdAt:
+          typeof createdAt === "number" && Number.isFinite(createdAt) ? createdAt : Date.now(),
+      }))
+      .sort((a, b) => a.order - b.order);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === "ENOENT") {
+      return [];
+    }
+    quarantineCorruptTabs(tabsPath);
+    return [];
   }
-  return [];
 }
 
 export function saveTabs(tabs: TabData[]): void {
   const tabsPath = getTabsPath();
+  const dir = dirname(tabsPath);
+  mkdirSync(dir, { recursive: true });
+
+  const cleanTabs = tabs.map(({ id, name, order, createdAt }) => ({
+    id,
+    name,
+    order,
+    createdAt,
+  }));
+  const tmpPath = join(dir, `.tabs.${process.pid}.${crypto.randomUUID()}.tmp`);
+
   try {
-    const dir = dirname(tabsPath);
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
+    writeFileSync(tmpPath, JSON.stringify(cleanTabs, null, 2), "utf-8");
+    renameSync(tmpPath, tabsPath);
+  } catch (err) {
+    try {
+      unlinkSync(tmpPath);
+    } catch {
+      // Ignore cleanup error if temp file was never created or already moved
     }
-    const cleanTabs = tabs.map(({ id, name, order, createdAt }) => ({
-      id,
-      name,
-      order,
-      createdAt,
-    }));
-    writeFileSync(tabsPath, JSON.stringify(cleanTabs, null, 2), "utf-8");
-  } catch (e) {
-    console.error("Error writing tabs.json:", e);
+    throw err;
   }
 }
 

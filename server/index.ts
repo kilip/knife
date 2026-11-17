@@ -141,17 +141,22 @@ if (cliArgs.onboarding) {
 }
 
 // Initialize tabs from persistent storage
-let currentTabs = loadTabs();
-if (currentTabs.length === 0 && !existsSync(getTabsPath())) {
-  const shellName = getShellName();
-  const initialId = crypto.randomUUID().slice(0, 8);
-  currentTabs.push({
-    id: initialId,
-    name: `${shellName} 1`,
-    order: 0,
-    createdAt: Date.now(),
-  });
-  saveTabs(currentTabs);
+let currentTabs: TabData[] = [];
+try {
+  currentTabs = loadTabs();
+  if (currentTabs.length === 0 && !existsSync(getTabsPath())) {
+    const shellName = getShellName();
+    const initialId = crypto.randomUUID().slice(0, 8);
+    currentTabs.push({
+      id: initialId,
+      name: `${shellName} 1`,
+      order: 0,
+      createdAt: Date.now(),
+    });
+    saveTabs(currentTabs);
+  }
+} catch (err) {
+  console.error("[server] Failed to initialize tabs:", err);
 }
 
 function getSecurityHeaders(cfg: KnifeConfig): Headers {
@@ -586,8 +591,17 @@ try {
             createdAt: Date.now(),
           };
 
-          currentTabs.push(newTab);
-          saveTabs(currentTabs);
+          const nextTabs = [...currentTabs, newTab];
+          try {
+            saveTabs(nextTabs);
+          } catch (err) {
+            console.error("[server] Failed to save tabs on create:", err);
+            return Response.json(
+              { error: "Failed to persist tabs" },
+              { status: 500, headers: secHeaders },
+            );
+          }
+          currentTabs = nextTabs;
 
           return Response.json(newTab, { status: 201, headers: secHeaders });
         }
@@ -603,18 +617,24 @@ try {
             body.tabIds.forEach((id, index) => {
               const tab = idMap.get(id);
               if (tab) {
-                tab.order = index;
-                reordered.push(tab);
+                reordered.push({ ...tab, order: index });
                 idMap.delete(id);
               }
             });
             // Append any tabs not included in list
             idMap.forEach((tab) => {
-              tab.order = reordered.length;
-              reordered.push(tab);
+              reordered.push({ ...tab, order: reordered.length });
             });
+            try {
+              saveTabs(reordered);
+            } catch (err) {
+              console.error("[server] Failed to save tabs on reorder:", err);
+              return Response.json(
+                { error: "Failed to persist tab order" },
+                { status: 500, headers: secHeaders },
+              );
+            }
             currentTabs = reordered;
-            saveTabs(currentTabs);
           }
           return Response.json(currentTabs, { headers: secHeaders });
         }
@@ -646,8 +666,19 @@ try {
           if (contentTypeErr) return contentTypeErr;
           const body = (await req.json().catch(() => ({}))) as { name?: string };
           if (body.name && typeof body.name === "string") {
-            currentTabs[tabIndex].name = body.name.trim();
-            saveTabs(currentTabs);
+            const nextTabs = currentTabs.map((t, i) =>
+              i === tabIndex ? { ...t, name: body.name!.trim() } : t,
+            );
+            try {
+              saveTabs(nextTabs);
+            } catch (err) {
+              console.error("[server] Failed to save tabs on rename:", err);
+              return Response.json(
+                { error: "Failed to persist tab rename" },
+                { status: 500, headers: secHeaders },
+              );
+            }
+            currentTabs = nextTabs;
           }
           return Response.json(currentTabs[tabIndex], { headers: secHeaders });
         }
@@ -655,14 +686,20 @@ try {
         // Delete / Close tab
         if (req.method === "DELETE") {
           const deletedTab = currentTabs[tabIndex];
+          const nextTabs = currentTabs
+            .filter((_, i) => i !== tabIndex)
+            .map((t, i) => ({ ...t, order: i }));
+          try {
+            saveTabs(nextTabs);
+          } catch (err) {
+            console.error("[server] Failed to save tabs on delete:", err);
+            return Response.json(
+              { error: "Failed to persist tab deletion" },
+              { status: 500, headers: secHeaders },
+            );
+          }
           closeActivePty(deletedTab.id);
-          currentTabs.splice(tabIndex, 1);
-
-          // Re-index orders
-          currentTabs.forEach((t, i) => {
-            t.order = i;
-          });
-          saveTabs(currentTabs);
+          currentTabs = nextTabs;
 
           return Response.json(
             { success: true, remainingTabs: currentTabs },

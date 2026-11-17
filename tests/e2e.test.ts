@@ -973,6 +973,44 @@ describe("Knife End-to-End System Tests", () => {
     expect("sessionName" in updateCheckData).toBe(false);
   });
 
+  it("returns 500 and keeps in-memory tabs unchanged when saveTabs fails", async () => {
+    const sessionToken = createSessionToken("testowner", "test-secret-key-e2e");
+    const cookieHeader = `knife_session=${sessionToken}`;
+
+    const beforeRes = await fetch(`http://127.0.0.1:${testPort}/api/tabs`, {
+      headers: { Cookie: cookieHeader },
+    });
+    expect(beforeRes.status).toBe(200);
+    const beforeTabs = (await beforeRes.json()) as Array<{ id: string }>;
+
+    const tabsFilePath = join(testDir, "data", "tabs.json");
+    rmSync(tabsFilePath, { recursive: true, force: true });
+    mkdirSync(tabsFilePath);
+
+    try {
+      const failRes = await fetch(`http://127.0.0.1:${testPort}/api/tabs`, {
+        method: "POST",
+        headers: {
+          Cookie: cookieHeader,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name: "Should Fail" }),
+      });
+      expect(failRes.status).toBe(500);
+      const failBody = (await failRes.json()) as { error?: string };
+      expect(typeof failBody.error).toBe("string");
+
+      const afterRes = await fetch(`http://127.0.0.1:${testPort}/api/tabs`, {
+        headers: { Cookie: cookieHeader },
+      });
+      expect(afterRes.status).toBe(200);
+      const afterTabs = (await afterRes.json()) as Array<{ id: string }>;
+      expect(afterTabs.length).toBe(beforeTabs.length);
+    } finally {
+      rmSync(tabsFilePath, { recursive: true, force: true });
+    }
+  });
+
   it("knife onboarding exits cleanly when already configured", async () => {
     const proc = Bun.spawn(
       ["bun", "run", "server/index.ts", "onboarding", "--config", configPath],
