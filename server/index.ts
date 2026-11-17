@@ -144,37 +144,6 @@ if (currentTabs.length === 0 && !existsSync(getTabsPath())) {
   saveTabs(currentTabs);
 }
 
-// First run: generate one-time setup token
-if (isFirstRun) {
-  const token = generateSetupToken();
-  const displayHost = config.host === "0.0.0.0" ? "127.0.0.1" : config.host;
-  const setupUrl = `http://${displayHost}:${config.port}/setup?token=${token}`;
-
-  console.log("\n" + "=".repeat(64));
-  console.log("  KNIFE - First Run Setup");
-  console.log("=".repeat(64));
-  console.log("\nNo existing configuration found. Knife is running in setup mode.");
-  if (config.publicDomain) {
-    const publicSetupUrl = `${config.publicScheme}://${config.publicDomain}/setup?token=${token}`;
-    console.log(`  Public: \x1b[36m\x1b[1m${publicSetupUrl}\x1b[0m`);
-    console.log(`  Local:  \x1b[36m\x1b[1m${setupUrl}\x1b[0m\n`);
-  } else {
-    console.log(`  \x1b[36m\x1b[1m${setupUrl}\x1b[0m\n`);
-  }
-  console.log(`One-time Setup Token: \x1b[33m${token}\x1b[0m`);
-  console.log("=".repeat(64) + "\n");
-} else {
-  const origin = getPublicOrigin(config);
-  console.log("\n" + "=".repeat(64));
-  console.log(`  KNIFE - Web Terminal`);
-  console.log("=".repeat(64));
-  console.log(`Listening on:       http://${config.host}:${config.port}`);
-  console.log(`Configured Public:  ${origin}`);
-  console.log(`Allowed User:       ${config.auth?.allowedUsername}`);
-  console.log(`GitHub Callback:    ${origin}/auth/github/callback`);
-  console.log("=".repeat(64) + "\n");
-}
-
 function getSecurityHeaders(cfg: KnifeConfig): Headers {
   const headers = new Headers();
   const domain = cfg.publicDomain || `${cfg.host}:${cfg.port}`;
@@ -1153,6 +1122,37 @@ try {
       });
     },
   });
+
+  // Print startup / setup banner only after the server is bound and listening
+  if (isFirstRun) {
+    const token = generateSetupToken();
+    const displayHost = config.host === "0.0.0.0" ? "127.0.0.1" : config.host;
+    const setupUrl = `http://${displayHost}:${config.port}/setup?token=${token}`;
+
+    console.log(`\n${"=".repeat(64)}`);
+    console.log("  KNIFE - First Run Setup");
+    console.log("=".repeat(64));
+    console.log("\nNo existing configuration found. Knife is running in setup mode.");
+    if (config.publicDomain) {
+      const publicSetupUrl = `${config.publicScheme}://${config.publicDomain}/setup?token=${token}`;
+      console.log(`  Public: \x1b[36m\x1b[1m${publicSetupUrl}\x1b[0m`);
+      console.log(`  Local:  \x1b[36m\x1b[1m${setupUrl}\x1b[0m\n`);
+    } else {
+      console.log(`  \x1b[36m\x1b[1m${setupUrl}\x1b[0m\n`);
+    }
+    console.log(`One-time Setup Token: \x1b[33m${token}\x1b[0m`);
+    console.log(`${"=".repeat(64)}\n`);
+  } else {
+    const origin = getPublicOrigin(config);
+    console.log(`\n${"=".repeat(64)}`);
+    console.log("  KNIFE - Web Terminal");
+    console.log("=".repeat(64));
+    console.log(`Listening on:       http://${config.host}:${config.port}`);
+    console.log(`Configured Public:  ${origin}`);
+    console.log(`Allowed User:       ${config.auth?.allowedUsername}`);
+    console.log(`GitHub Callback:    ${origin}/auth/github/callback`);
+    console.log(`${"=".repeat(64)}\n`);
+  }
 } catch (err: unknown) {
   const errorObj = err as { code?: string; message?: string };
   if (errorObj?.code === "EADDRINUSE" || errorObj?.message?.includes("address already in use")) {
