@@ -2,15 +2,6 @@
 
 Guidance for AI coding agents working on **knife** (`@kilip/knife`): a single-user, self-hosted web terminal (multi-tab, PWA, file browser) that runs on Bun behind a TLS-terminating reverse proxy.
 
-## Scope
-
-Do what was asked, nothing more. If the request is ambiguous, ask.
-
-- No drive-by refactors, renames, reformatting, dependency bumps, or new features/files/config keys beyond the task. Mention unrelated problems in your reply and leave them alone.
-- Don't touch `config.json`, `data/`, CI/release config, or run destructive commands unless the task requires it.
-- Don't push, tag, open PRs, or bump versions unless told. Never rewrite published history.
-- If the right fix is bigger than the request, describe it and let the user decide.
-
 ## Stack
 
 - **Runtime:** Bun 1.2+ (`Bun.serve`, `Bun.Terminal`, `Bun.spawn`). Linux is the primary target.
