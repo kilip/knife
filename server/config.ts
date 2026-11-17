@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { isValidIp } from "./proxy";
 import { getPlatformPaths } from "./service/paths";
@@ -125,20 +133,35 @@ export function loadConfig(
   let fileConfig: Partial<KnifeConfig> = {};
   let isFirstRun = true;
 
-  if (existsSync(configPath)) {
+  let raw: string | null = null;
+  try {
+    raw = readFileSync(configPath, "utf-8");
+  } catch (e) {
+    const err = e as NodeJS.ErrnoException;
+    if (err.code !== "ENOENT") {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`Failed to read config at ${configPath}: ${message}`, { cause: err });
+    }
+  }
+
+  if (raw !== null) {
     try {
-      const raw = readFileSync(configPath, "utf-8");
-      fileConfig = JSON.parse(raw);
-      // Considered first run if publicDomain or auth is missing/incomplete
-      if (
-        fileConfig.publicDomain &&
-        fileConfig.auth?.githubClientId &&
-        fileConfig.auth?.allowedUsername
-      ) {
-        isFirstRun = false;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("Config root must be a JSON object");
       }
+      fileConfig = parsed as Partial<KnifeConfig>;
     } catch (e) {
-      console.error(`Warning: Failed to read existing config at ${configPath}:`, e);
+      const message = e instanceof Error ? e.message : String(e);
+      throw new Error(`Failed to parse config at ${configPath}: ${message}`, { cause: e });
+    }
+    // Considered first run if publicDomain or auth is missing/incomplete
+    if (
+      fileConfig.publicDomain &&
+      fileConfig.auth?.githubClientId &&
+      fileConfig.auth?.allowedUsername
+    ) {
+      isFirstRun = false;
     }
   }
 
@@ -190,8 +213,20 @@ export function loadConfig(
 
 export function saveConfig(config: KnifeConfig, configPath: string = resolveConfigPath()): void {
   const dir = dirname(configPath);
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  chmodSync(dir, 0o700);
+
+  const tmpPath = join(dir, `.config.${process.pid}.${crypto.randomUUID()}.tmp`);
+  try {
+    writeFileSync(tmpPath, JSON.stringify(config, null, 2), { encoding: "utf-8", mode: 0o600 });
+    chmodSync(tmpPath, 0o600);
+    renameSync(tmpPath, configPath);
+  } catch (err) {
+    try {
+      unlinkSync(tmpPath);
+    } catch {
+      // Ignore cleanup error if temp file was never created or already moved
+    }
+    throw err;
   }
-  writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
 }

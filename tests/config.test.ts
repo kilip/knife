@@ -1,8 +1,23 @@
 import { describe, expect, it } from "bun:test";
 import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  DEFAULT_CONFIG,
+  type KnifeConfig,
   loadConfig,
   parseCliArgs,
   resolveConfigPath,
+  saveConfig,
   validateHost,
   validatePort,
 } from "../server/config";
@@ -109,6 +124,116 @@ describe("Server Config & CLI Parser", () => {
       } else {
         delete process.env.KNIFE_CONFIG_PATH;
       }
+    }
+  });
+
+  it("enters isFirstRun = true only when config file does not exist (ENOENT)", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "knife-config-enoent-"));
+    try {
+      const missingPath = join(tmpDir, "missing.json");
+      const { isFirstRun, configPath } = loadConfig({ configPath: missingPath });
+      expect(isFirstRun).toBe(true);
+      expect(configPath).toBe(missingPath);
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("throws on corrupt or non-object config.json instead of falling back to first-run", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "knife-config-corrupt-"));
+    try {
+      const corruptPath = join(tmpDir, "config.json");
+      writeFileSync(corruptPath, "{ invalid json", "utf-8");
+      expect(() => loadConfig({ configPath: corruptPath })).toThrow(/Failed to parse config/);
+
+      writeFileSync(corruptPath, "", "utf-8");
+      expect(() => loadConfig({ configPath: corruptPath })).toThrow(/Failed to parse config/);
+
+      writeFileSync(corruptPath, "[]", "utf-8");
+      expect(() => loadConfig({ configPath: corruptPath })).toThrow(
+        /Config root must be a JSON object/,
+      );
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("throws on non-ENOENT read errors", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "knife-config-eisdir-"));
+    try {
+      const dirAsConfig = join(tmpDir, "config.json");
+      mkdirSync(dirAsConfig);
+      expect(() => loadConfig({ configPath: dirAsConfig })).toThrow(/Failed to read config/);
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("saveConfig writes atomically and leaves no temp files behind", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "knife-config-atomic-"));
+    try {
+      const configDir = join(tmpDir, "nested");
+      const configPath = join(configDir, "config.json");
+      const config: KnifeConfig = {
+        ...DEFAULT_CONFIG,
+        publicDomain: "knife.example.com",
+        auth: {
+          githubClientId: "client-id",
+          githubClientSecret: "client-secret",
+          allowedUsername: "kilip",
+        },
+        sessionSecret: "super-secret-value",
+      };
+
+      saveConfig(config, configPath);
+
+      expect(readdirSync(configDir)).toEqual(["config.json"]);
+      const saved = JSON.parse(readFileSync(configPath, "utf-8")) as KnifeConfig;
+      expect(saved).toEqual(config);
+
+      const loaded = loadConfig({ configPath });
+      expect(loaded.isFirstRun).toBe(false);
+      expect(loaded.config.sessionSecret).toBe("super-secret-value");
+
+      // Overwriting an existing config also leaves no temp files
+      saveConfig({ ...config, port: 4000 }, configPath);
+      expect(readdirSync(configDir)).toEqual(["config.json"]);
+      expect(loadConfig({ configPath }).config.port).toBe(4000);
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("saveConfig enforces 0700 directory and 0600 file permissions on POSIX", () => {
+    if (process.platform === "win32") {
+      return;
+    }
+
+    const tmpDir = mkdtempSync(join(tmpdir(), "knife-config-perms-"));
+    try {
+      const configDir = join(tmpDir, "conf");
+      const configPath = join(configDir, "config.json");
+
+      // Pre-create with overly permissive modes to verify saveConfig tightens them
+      mkdirSync(configDir, { mode: 0o755 });
+      chmodSync(configDir, 0o755);
+      writeFileSync(configPath, "{}", { encoding: "utf-8", mode: 0o644 });
+      chmodSync(configPath, 0o644);
+
+      saveConfig(
+        {
+          ...DEFAULT_CONFIG,
+          sessionSecret: "secret-123",
+        },
+        configPath,
+      );
+
+      const dirMode = statSync(configDir).mode & 0o777;
+      const fileMode = statSync(configPath).mode & 0o777;
+      expect(dirMode).toBe(0o700);
+      expect(fileMode).toBe(0o600);
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
     }
   });
 });
