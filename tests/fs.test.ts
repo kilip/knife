@@ -11,7 +11,6 @@ import {
   resolveDownloadHeaders,
   statItem,
 } from "../server/fs";
-import { getTabCwd } from "../server/tmux";
 
 const TEST_DIR = join(os.tmpdir(), "knife-fs-test-" + Math.random().toString(36).slice(2));
 
@@ -52,7 +51,7 @@ describe("Filesystem API & Security Guardrails", () => {
     expect(isProtectedPath("/usr/bin/env")).toBe(true);
     expect(isProtectedPath(process.cwd())).toBe(true);
     expect(isProtectedPath(join(process.cwd(), "data"))).toBe(true);
-    expect(isProtectedPath(join(process.cwd(), "data", "knife-tmux.conf"))).toBe(true);
+    expect(isProtectedPath(join(process.cwd(), "data", "tabs.json"))).toBe(true);
     expect(isProtectedPath(join(process.cwd(), "config.json"))).toBe(true);
 
     // Unprotected user directories
@@ -124,11 +123,6 @@ describe("Filesystem API & Security Guardrails", () => {
     expect(view[0]).toBe(0x50);
     expect(view[1]).toBe(0x4b);
     expect(new TextDecoder().decode(view)).toContain("-test.txt");
-  });
-
-  it("getTabCwd returns null for non-existent session", () => {
-    const cwd = getTabCwd("knife-nonexistent-session-xyz");
-    expect(cwd).toBeNull();
   });
 
   it("resolveDownloadHeaders forces attachment/text-plain for HTML and SVG even with inline=1", () => {

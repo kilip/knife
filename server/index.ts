@@ -30,7 +30,7 @@ import { getClientIp } from "./proxy";
 import { formatRequestLog, shouldLogRequest } from "./request-log";
 import { handleServiceCommand } from "./service";
 import { getServiceManager } from "./service/factory";
-import { getShellName, getUserShell, isTmuxInstalled } from "./shell";
+import { getShellName, getUserShell } from "./shell";
 import {
   getTabsPath,
   loadSettings,
@@ -39,7 +39,6 @@ import {
   saveTabs,
   type TabData,
 } from "./storage";
-import { getTabCwd, killSession } from "./tmux";
 import {
   checkLatestVersion,
   detectPackageManager,
@@ -100,10 +99,6 @@ if (cliArgs.unknown && cliArgs.unknown.length > 0) {
   process.exit(1);
 }
 
-// Tmux is optional; direct user shell is the primary terminal mode
-if (!isTmuxInstalled()) {
-  console.log("[server] tmux is not installed. Direct user shell mode is active.");
-}
 let { config, isFirstRun, configPath } = loadConfig(cliArgs);
 
 if (cliArgs.onboarding) {
@@ -153,7 +148,6 @@ if (currentTabs.length === 0 && !existsSync(getTabsPath())) {
   currentTabs.push({
     id: initialId,
     name: `${shellName} 1`,
-    sessionName: `knife-${initialId}`,
     order: 0,
     createdAt: Date.now(),
   });
@@ -268,16 +262,12 @@ try {
           return new Response("Missing tabId", { status: 400 });
         }
 
-        const tab = currentTabs.find((t) => t.id === tabId);
-        const sessionName = tab ? tab.sessionName : `knife-${tabId}`;
-
         const cols = parseInt(url.searchParams.get("cols") || "0", 10) || 80;
         const rows = parseInt(url.searchParams.get("rows") || "0", 10) || 24;
 
         const upgraded = server.upgrade(req, {
           data: {
             tabId,
-            sessionName,
             username,
             cols,
             rows,
@@ -588,12 +578,10 @@ try {
           const id = crypto.randomUUID().slice(0, 8);
           const shellName = getShellName();
           const tabName = body.name?.trim() || `${shellName} ${currentTabs.length + 1}`;
-          const sessionName = `knife-${id}`;
 
           const newTab: TabData = {
             id,
             name: tabName,
-            sessionName,
             order: currentTabs.length,
             createdAt: Date.now(),
           };
@@ -641,14 +629,8 @@ try {
             return Response.json({ error: "Tab not found" }, { status: 404, headers: secHeaders });
           }
           const activePty = getActivePty(tab.id);
-          const cwd =
-            activePty?.getCwd() ||
-            (isTmuxInstalled() ? getTabCwd(tab.sessionName) : null) ||
-            getDefaultHome();
-          return Response.json(
-            { id: tab.id, sessionName: tab.sessionName, cwd },
-            { headers: secHeaders },
-          );
+          const cwd = activePty?.getCwd() || getDefaultHome();
+          return Response.json({ id: tab.id, cwd }, { headers: secHeaders });
         }
 
         const tabId = url.pathname.slice("/api/tabs/".length);
@@ -674,9 +656,6 @@ try {
         if (req.method === "DELETE") {
           const deletedTab = currentTabs[tabIndex];
           closeActivePty(deletedTab.id);
-          if (isTmuxInstalled()) {
-            killSession(deletedTab.sessionName);
-          }
           currentTabs.splice(tabIndex, 1);
 
           // Re-index orders
@@ -1064,7 +1043,6 @@ try {
           const currentVersion = getCurrentVersion();
           const checkRes = await checkLatestVersion(currentVersion, force);
           const isService = await isManagedService("knife");
-          const isTmux = isTmuxInstalled();
           const activeTabsCount = currentTabs.length;
           const pkgManager = detectPackageManager();
 
@@ -1075,7 +1053,6 @@ try {
               updateAvailable: checkRes.updateAvailable,
               cached: checkRes.cached ?? false,
               isService,
-              isTmux,
               activeTabsCount,
               command: `${pkgManager.command} ${pkgManager.args.join(" ")}`,
             },

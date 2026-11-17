@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getTabsPath, loadTabs, saveTabs, type TabData } from "../server/storage";
@@ -38,14 +38,35 @@ describe("Tabs Storage and Empty State", () => {
 
   it("persists and restores multiple tabs in order", () => {
     const mockTabs: TabData[] = [
-      { id: "tab-1", name: "Shell 1", sessionName: "knife-tab-1", order: 0, createdAt: 100 },
-      { id: "tab-2", name: "Shell 2", sessionName: "knife-tab-2", order: 1, createdAt: 200 },
+      { id: "tab-1", name: "Shell 1", order: 0, createdAt: 100 },
+      { id: "tab-2", name: "Shell 2", order: 1, createdAt: 200 },
     ];
     saveTabs(mockTabs);
     const loaded = loadTabs();
     expect(loaded).toHaveLength(2);
     expect(loaded[0].id).toBe("tab-1");
     expect(loaded[1].id).toBe("tab-2");
+  });
+
+  it("loads legacy tabs.json containing sessionName and omits it on next save", () => {
+    const legacyTabs = [
+      { id: "tab-1", name: "Shell 1", sessionName: "knife-tab-1", order: 0, createdAt: 100 },
+      { id: "tab-2", name: "Shell 2", sessionName: "knife-tab-2", order: 1, createdAt: 200 },
+    ];
+    writeFileSync(getTabsPath(), JSON.stringify(legacyTabs, null, 2), "utf-8");
+
+    const loaded = loadTabs();
+    expect(loaded).toHaveLength(2);
+    expect(loaded[0]).toEqual({ id: "tab-1", name: "Shell 1", order: 0, createdAt: 100 });
+    expect("sessionName" in loaded[0]).toBe(false);
+
+    saveTabs(loaded);
+    const savedRaw = JSON.parse(readFileSync(getTabsPath(), "utf-8")) as Array<
+      Record<string, unknown>
+    >;
+    expect(savedRaw).toHaveLength(2);
+    expect("sessionName" in savedRaw[0]).toBe(false);
+    expect("sessionName" in savedRaw[1]).toBe(false);
   });
 });
 

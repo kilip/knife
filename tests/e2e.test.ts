@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createSessionToken } from "../server/auth";
-import { hasSession } from "../server/tmux";
 
 describe("Knife End-to-End System Tests", () => {
   const testPort = 3589;
@@ -288,9 +287,12 @@ describe("Knife End-to-End System Tests", () => {
       headers: { Cookie: cookieHeader },
     });
     expect(tabsRes.status).toBe(200);
-    const initialTabs = (await tabsRes.json()) as Array<{ id: string; sessionName: string }>;
+    const initialTabs = (await tabsRes.json()) as Array<Record<string, unknown>>;
     expect(Array.isArray(initialTabs)).toBe(true);
     expect(initialTabs.length).toBeGreaterThanOrEqual(1);
+    for (const tab of initialTabs) {
+      expect("sessionName" in tab).toBe(false);
+    }
 
     // 2. Create second tab
     const createRes = await fetch(`http://127.0.0.1:${testPort}/api/tabs`, {
@@ -305,9 +307,9 @@ describe("Knife End-to-End System Tests", () => {
     const createdTab = (await createRes.json()) as {
       id: string;
       name: string;
-      sessionName: string;
     };
     expect(createdTab.name).toBe("Work Tab");
+    expect("sessionName" in createdTab).toBe(false);
 
     // 3. Connect via WebSocket to the created tab using session cookie
     const wsUrl = `ws://127.0.0.1:${testPort}/ws/terminal?tabId=${createdTab.id}`;
@@ -397,7 +399,7 @@ describe("Knife End-to-End System Tests", () => {
       headers: { Cookie: cookieHeader },
     });
     expect(tabsRes.status).toBe(200);
-    const tabs = (await tabsRes.json()) as Array<{ id: string; sessionName: string }>;
+    const tabs = (await tabsRes.json()) as Array<{ id: string }>;
     expect(Array.isArray(tabs)).toBe(true);
     expect(tabs.length).toBeGreaterThan(0);
     const targetTab = tabs[0];
@@ -957,6 +959,18 @@ describe("Knife End-to-End System Tests", () => {
       }
       rmSync(onboardingDir, { recursive: true, force: true });
     }
+  });
+
+  it("returns update check without legacy session or multiplexer fields", async () => {
+    const sessionToken = createSessionToken("testowner", "test-secret-key-e2e");
+    const updateCheckRes = await fetch(`http://127.0.0.1:${testPort}/api/system/update/check`, {
+      headers: { Cookie: `knife_session=${sessionToken}` },
+    });
+    expect(updateCheckRes.status).toBe(200);
+    const updateCheckData = (await updateCheckRes.json()) as Record<string, unknown>;
+    const legacyField = ["is", "Tm", "ux"].join("");
+    expect(legacyField in updateCheckData).toBe(false);
+    expect("sessionName" in updateCheckData).toBe(false);
   });
 
   it("knife onboarding exits cleanly when already configured", async () => {

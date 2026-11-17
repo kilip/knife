@@ -23,7 +23,6 @@ import { ThemeSelector } from "./ThemeSelector";
 export interface TabItem {
   id: string;
   name: string;
-  sessionName: string;
   order: number;
 }
 

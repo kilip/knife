@@ -55,4 +55,4 @@ Do not paste secrets, session tokens, or config values.
 
 ## Additional context
 
-<!-- Anything else that helps, such as tmux usage, client device, network setup. -->
+<!-- Anything else that helps, such as client device or network setup. -->

@@ -129,17 +129,8 @@ export function SelfUpdateModal({
                 <span>Active Terminal Sessions ({updateInfo.activeTabsCount})</span>
               </div>
               <p className="leading-relaxed">
-                {updateInfo.isTmux ? (
-                  <span>
-                    <strong>tmux is active:</strong> Background shell sessions and running commands
-                    will be preserved across the restart. Tabs will automatically reconnect.
-                  </span>
-                ) : (
-                  <span>
-                    <strong>Direct shell mode:</strong> Active terminal sessions may be terminated
-                    when the daemon restarts. Please save your work first.
-                  </span>
-                )}
+                Applying the update restarts Knife and terminates all running shells. Please save
+                your work before continuing.
               </p>
             </div>
           )}

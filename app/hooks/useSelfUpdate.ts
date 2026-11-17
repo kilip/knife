@@ -6,7 +6,6 @@ export interface UpdateInfo {
   updateAvailable: boolean;
   cached?: boolean;
   isService: boolean;
-  isTmux: boolean;
   activeTabsCount: number;
   command: string;
 }

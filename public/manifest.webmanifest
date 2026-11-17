@@ -1,7 +1,7 @@
 {
   "name": "Knife — Web Terminal",
   "short_name": "Knife",
-  "description": "High-performance multi-tab web terminal powered by tmux",
+  "description": "High-performance multi-tab web terminal",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

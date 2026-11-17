@@ -3,7 +3,6 @@ import { PtySession } from "./pty";
 
 export interface WsClientData {
   tabId: string;
-  sessionName: string;
   username: string;
   cols?: number;
   rows?: number;
@@ -40,12 +39,10 @@ export function closeActivePty(tabId: string): void {
 
 export const websocketHandler = {
   open(ws: KnifeWebSocket) {
-    const { tabId, sessionName, cols, rows } = ws.data;
+    const { tabId, cols, rows } = ws.data;
     const initialCols = cols && cols >= 10 ? cols : 80;
     const initialRows = rows && rows >= 5 ? rows : 24;
-    console.log(
-      `[ws] Client connected to tab ${tabId} (${sessionName}, ${initialCols}x${initialRows})`,
-    );
+    console.log(`[ws] Client connected to tab ${tabId} (${initialCols}x${initialRows})`);
     ws.data.lastPingTime = Date.now();
 
     // Track this socket as the active connection for the tab
@@ -89,7 +86,7 @@ export const websocketHandler = {
         });
 
         pty.setExitCallback((code: number) => {
-          console.log(`[ws] Shell process exited for ${sessionName} (exit code ${code})`);
+          console.log(`[ws] Shell process exited for tab ${tabId} (exit code ${code})`);
           closeActivePty(tabId);
           try {
             ws.send(JSON.stringify({ type: "exit", code }));
@@ -101,7 +98,7 @@ export const websocketHandler = {
       } else {
         // Create new direct user shell PTY session
         pty = new PtySession({
-          sessionName,
+          tabId,
           cols: initialCols,
           rows: initialRows,
           onData: (data: string) => {
@@ -117,7 +114,7 @@ export const websocketHandler = {
             } catch {}
           },
           onExit: (code: number) => {
-            console.log(`[ws] Shell process exited for ${sessionName} (exit code ${code})`);
+            console.log(`[ws] Shell process exited for tab ${tabId} (exit code ${code})`);
             closeActivePty(tabId);
             try {
               ws.send(JSON.stringify({ type: "exit", code }));
@@ -130,7 +127,7 @@ export const websocketHandler = {
         activePtys.set(tabId, pty);
       }
     } catch (err) {
-      console.error(`[ws] Failed to spawn PTY for ${sessionName}:`, err);
+      console.error(`[ws] Failed to spawn PTY for tab ${tabId}:`, err);
       ws.send(
         JSON.stringify({
           type: "error",

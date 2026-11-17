@@ -86,15 +86,3 @@ export function getShellName(shellPath?: string): string {
   const name = basename(targetPath).toLowerCase();
   return name || "shell";
 }
-
-/**
- * Checks whether tmux binary is available on the system.
- */
-export function isTmuxInstalled(): boolean {
-  try {
-    const path = Bun.which("tmux");
-    return path !== null;
-  } catch {
-    return false;
-  }
-}

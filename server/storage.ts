@@ -5,7 +5,6 @@ import { resolveConfigPath } from "./config";
 export interface TabData {
   id: string;
   name: string;
-  sessionName: string;
   order: number;
   createdAt: number;
 }
@@ -69,7 +68,9 @@ export function loadTabs(): TabData[] {
     const raw = readFileSync(tabsPath, "utf-8");
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      return parsed.sort((a, b) => a.order - b.order);
+      return parsed
+        .map(({ id, name, order, createdAt }) => ({ id, name, order, createdAt }))
+        .sort((a, b) => a.order - b.order);
     }
   } catch (e) {
     console.error("Error reading tabs.json:", e);
@@ -84,7 +85,13 @@ export function saveTabs(tabs: TabData[]): void {
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
-    writeFileSync(tabsPath, JSON.stringify(tabs, null, 2), "utf-8");
+    const cleanTabs = tabs.map(({ id, name, order, createdAt }) => ({
+      id,
+      name,
+      order,
+      createdAt,
+    }));
+    writeFileSync(tabsPath, JSON.stringify(cleanTabs, null, 2), "utf-8");
   } catch (e) {
     console.error("Error writing tabs.json:", e);
   }

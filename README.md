@@ -6,7 +6,7 @@ A single-user self-hosted web terminal with multi-tab support, PWA, and integrat
 
 ## ✨ Features
 
-- **Native Bun PTY**: Uses Bun's native `Bun.Terminal` PTY engine spawning your login shell (`$SHELL -l`) directly — no native C++ addons, `node-pty`, or `tmux` required.
+- **Native Bun PTY**: Uses Bun's native `Bun.Terminal` PTY engine spawning your login shell (`$SHELL -l`) directly — no native C++ addons or `node-pty` required.
 - **Resilient WebSockets**: Disconnecting or refreshing the page keeps the PTY alive for a 60-second grace period and replays the 128 KB rolling output buffer on reconnect. Auto-reconnect with exponential backoff and application-level ping/pong heartbeats.
 - **React Router 8 + Tailwind CSS**: Clean single-page application built on React Router 8 (framework mode, `ssr: false`) with CSS-variable-driven theming.
 - **Full xterm.js feature set**: Fit, WebLinks, WebGL with Canvas/DOM fallbacks, Unicode 11, OSC 52 clipboard sync, truecolor (24-bit), and mouse reporting.
@@ -35,9 +35,9 @@ Knife Bun HTTP & WebSocket Server
                  └── knife-<id-3> ($SHELL -l, 128 KB rolling buffer)
 ```
 
-- **Tab Persistence**: Tab metadata (`id`, `name`, `sessionName`, `order`, `createdAt`) is persisted in `<dataDir>/tabs.json`.
-- **WebSocket Reconnect**: When a client disconnects, Knife keeps the in-memory `PtySession` alive for a 60-second grace period. Reconnecting within that window cancels the timer and replays the 128 KB rolling output buffer.
-- **Explicit Close**: Closing a tab immediately terminates its `PtySession` and removes it from `tabs.json`.
+- **Tab Persistence**: Tab metadata (`id`, `name`, `order`, `createdAt`) is persisted in `<dataDir>/tabs.json`.
+- **WebSocket Reconnect**: When a client disconnects or refreshes, Knife keeps the in-memory `PtySession` alive for a 60-second grace period. Reconnecting within that window cancels the timer and replays the 128 KB rolling output buffer.
+- **Explicit Close & Restart**: Closing a tab immediately terminates its `PtySession` and removes it from `tabs.json`. Restarting the Knife server or applying a self-update terminates all running shells.
 
 ---
 
@@ -45,7 +45,6 @@ Knife Bun HTTP & WebSocket Server
 
 - **Linux** (x86_64 or aarch64; primary target)
 - **Bun** (v1.2+)
-- **tmux** _(optional)_: Not required for terminal sessions; used only as a fallback for CWD lookup or cleaning up legacy `knife-*` sessions if present.
 
 ---
 
@@ -220,7 +219,6 @@ CLI Flags > Environment Variables > config.json > Defaults
 - `KNIFE_CONFIG_PATH`: Path to configuration file
 - `KNIFE_DATA_DIR`: Directory for persistent `tabs.json` and `settings.json`
 - `KNIFE_SESSION_SECRET`: Secret key used for signing session cookies
-- `KNIFE_TMUX_CONF`: Optional path to tmux config when using tmux fallback
 
 ### `config.json` Example
 

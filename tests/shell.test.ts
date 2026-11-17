@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { existsSync } from "node:fs";
 import { PtySession } from "../server/pty";
-import { getShellName, getUserShell, isTmuxInstalled } from "../server/shell";
+import { getShellName, getUserShell } from "../server/shell";
 
 describe("User Shell Detection and Direct PTY", () => {
   it("resolves a valid, executable user shell", () => {
@@ -17,17 +17,12 @@ describe("User Shell Detection and Direct PTY", () => {
     expect(["zsh", "bash", "fish", "sh", "dash"]).toContain(name);
   });
 
-  it("detects tmux installation status without throwing", () => {
-    const hasTmux = isTmuxInstalled();
-    expect(typeof hasTmux).toBe("boolean");
-  });
-
   it("spawns direct user shell PTY, executes commands, buffers output, and tracks cwd", async () => {
     const { promise, resolve } = Promise.withResolvers<string>();
     let collectedOutput = "";
 
     const pty = new PtySession({
-      sessionName: "test-direct-shell",
+      tabId: "test-direct-shell",
       cols: 80,
       rows: 24,
       onData: (data) => {

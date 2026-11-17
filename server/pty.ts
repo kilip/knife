@@ -33,7 +33,7 @@ export function appendRollingBuffer(
 }
 
 export interface PtySessionOptions {
-  sessionName: string;
+  tabId: string;
   cols?: number;
   rows?: number;
   shellPath?: string;
@@ -45,7 +45,7 @@ export interface PtySessionOptions {
 export class PtySession {
   private term: InstanceType<typeof Bun.Terminal> | null = null;
   private proc: ReturnType<typeof Bun.spawn> | null = null;
-  public readonly sessionName: string;
+  public readonly tabId: string;
   private isClosed: boolean = false;
   private outputBuffer: string = "";
   private readonly maxBufferSize: number = MAX_PTY_BUFFER_SIZE;
@@ -54,7 +54,7 @@ export class PtySession {
   private onExit?: (code: number) => void;
 
   constructor(options: PtySessionOptions) {
-    this.sessionName = options.sessionName;
+    this.tabId = options.tabId;
     this.onData = options.onData;
     this.onExit = options.onExit;
 
@@ -144,7 +144,7 @@ export class PtySession {
     try {
       this.term.write(data);
     } catch (err) {
-      console.error(`[pty] Error writing to terminal for ${this.sessionName}:`, err);
+      console.error(`[pty] Error writing to terminal for tab ${this.tabId}:`, err);
     }
   }
 
@@ -158,12 +158,12 @@ export class PtySession {
         this.proc.kill("SIGWINCH");
       }
     } catch (err) {
-      console.error(`[pty] Error resizing terminal for ${this.sessionName}:`, err);
+      console.error(`[pty] Error resizing terminal for tab ${this.tabId}:`, err);
     }
   }
 
   public refresh(): void {
-    // In direct PTY mode, terminal is controlled directly; no tmux refresh needed.
+    // In direct PTY mode, terminal is controlled directly; no refresh needed.
   }
 
   public close(): void {
