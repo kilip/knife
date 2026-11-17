@@ -145,17 +145,42 @@ describe("Knife End-to-End System Tests", () => {
     }
   });
 
-  it("serves sw.js and manifest.webmanifest with proper headers", async () => {
+  function assertSecurityHeaders(res: Response, expectedDomain: string) {
+    expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(res.headers.get("X-Frame-Options")).toBe("DENY");
+    expect(res.headers.get("Referrer-Policy")).toBe("strict-origin-when-cross-origin");
+    const csp = res.headers.get("Content-Security-Policy") ?? "";
+    const connectSrc = csp
+      .split(";")
+      .map((d) => d.trim())
+      .find((d) => d.startsWith("connect-src "));
+    expect(connectSrc).toBeDefined();
+    const tokens = (connectSrc ?? "").split(/\s+/);
+    expect(tokens).toContain("'self'");
+    expect(tokens).toContain(`ws://${expectedDomain}`);
+    expect(tokens).toContain(`wss://${expectedDomain}`);
+    expect(tokens).not.toContain("ws:");
+    expect(tokens).not.toContain("wss:");
+  }
+
+  it("serves sw.js, manifest.webmanifest, and HTML with security headers and restricted connect-src", async () => {
     const swRes = await fetch(`http://127.0.0.1:${testPort}/sw.js`);
     expect(swRes.status).toBe(200);
     expect(swRes.headers.get("Content-Type")).toContain("application/javascript");
     expect(swRes.headers.get("Cache-Control")).toContain("no-cache");
     expect(swRes.headers.get("Service-Worker-Allowed")).toBe("/");
+    assertSecurityHeaders(swRes, `127.0.0.1:${testPort}`);
 
     const manifestRes = await fetch(`http://127.0.0.1:${testPort}/manifest.webmanifest`);
     expect(manifestRes.status).toBe(200);
     expect(manifestRes.headers.get("Content-Type")).toContain("application/manifest+json");
     expect(manifestRes.headers.get("Cache-Control")).toBe("no-cache");
+    assertSecurityHeaders(manifestRes, `127.0.0.1:${testPort}`);
+
+    const htmlRes = await fetch(`http://127.0.0.1:${testPort}/setup`);
+    expect(htmlRes.status).toBe(200);
+    expect(htmlRes.headers.get("Content-Type")).toContain("text/html");
+    assertSecurityHeaders(htmlRes, `127.0.0.1:${testPort}`);
   });
 
   it("rejects setup with invalid token without logging expected token", async () => {
@@ -236,6 +261,11 @@ describe("Knife End-to-End System Tests", () => {
     expect(pubData.allowedUsername).toBeUndefined();
     expect(pubData.publicDomain).toBe("knife.test.local");
     expect(pubData.theme).toBe("tokyo-night");
+
+    // Verify configured-mode HTML and static responses restrict connect-src to publicDomain
+    const loginHtmlRes = await fetch(`http://127.0.0.1:${testPort}/login`);
+    expect(loginHtmlRes.status).toBe(200);
+    assertSecurityHeaders(loginHtmlRes, "knife.test.local");
   });
 
   it("rejects unauthenticated WS upgrade to /ws/terminal with 401 in configured mode", async () => {

@@ -167,7 +167,7 @@ function getSecurityHeaders(cfg: KnifeConfig): Headers {
     "default-src 'self'",
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
-    `connect-src 'self' ws://${domain} wss://${domain} ${cfg.host === "0.0.0.0" || cfg.host === "127.0.0.1" ? "ws: wss:" : ""}`.trim(),
+    `connect-src 'self' ws://${domain} wss://${domain}`,
     "img-src 'self' data: https://avatars.githubusercontent.com",
     "font-src 'self' data:",
     "frame-ancestors 'none'",
@@ -184,7 +184,11 @@ const clientBuildDir = existsSync(join(process.cwd(), "build", "client"))
   ? join(process.cwd(), "build", "client")
   : join(import.meta.dir, "..", "build", "client");
 
-function serveStaticFile(path: string, contentType?: string): Response | null {
+function serveStaticFile(
+  path: string,
+  contentType?: string,
+  secHeaders?: Headers,
+): Response | null {
   const relPath = path.replace(/^\//, "");
   if (!relPath) {
     return null;
@@ -199,7 +203,7 @@ function serveStaticFile(path: string, contentType?: string): Response | null {
       return null;
     }
     const file = Bun.file(fullPath);
-    const headers = new Headers();
+    const headers = new Headers(secHeaders);
     if (contentType) {
       headers.set("Content-Type", contentType);
     }
@@ -1138,7 +1142,7 @@ try {
 
       // 9. Static Asset Serving
       // Try serving exact static file from build/client
-      const staticFile = serveStaticFile(url.pathname);
+      const staticFile = serveStaticFile(url.pathname, undefined, secHeaders);
       if (staticFile) {
         return staticFile;
       }
