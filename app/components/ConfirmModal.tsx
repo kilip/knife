@@ -1,5 +1,5 @@
-import { useEffect } from "react";
 import { AlertTriangle, X } from "lucide-react";
+import { useEffect } from "react";
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -52,6 +52,7 @@ export function ConfirmModal({
             <h3 className="text-lg font-semibold">{title}</h3>
           </div>
           <button
+            type="button"
             onClick={onCancel}
             className="p-1 rounded-md text-[var(--fg-muted)] hover:text-[var(--fg-base)] hover:bg-[var(--bg-hover)] transition-colors cursor-pointer"
           >

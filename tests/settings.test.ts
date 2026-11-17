@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   DEFAULT_USER_SETTINGS,
+  getSettingsPath,
   loadSettings,
   saveSettings,
-  getSettingsPath,
 } from "../server/storage";
 
 describe("User Settings Storage", () => {

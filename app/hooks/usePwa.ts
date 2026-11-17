@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
 import { getSerwist } from "virtual:serwist";
 import type { Serwist } from "@serwist/window";
+import { useCallback, useEffect, useState } from "react";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;

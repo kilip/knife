@@ -1,11 +1,11 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import {
-  generateSetupToken,
-  getActiveSetupToken,
-  verifySetupToken,
   consumeSetupToken,
   createSessionToken,
+  generateSetupToken,
+  getActiveSetupToken,
   verifySessionToken,
+  verifySetupToken,
 } from "../server/auth";
 
 describe("Auth & Setup Token", () => {

@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { X, Download, Copy, Check, FileText, AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle, Check, Copy, Download, FileText, Loader2, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import type { FsItem } from "./types";
 
 interface FilePreviewModalProps {

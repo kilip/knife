@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from "react";
-import { Folder, FileText, Image, File, MoreVertical } from "lucide-react";
+import { File, FileText, Folder, Image, MoreVertical } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import type { FsItem } from "./types";
 
 interface FileItemRowProps {
@@ -17,7 +17,7 @@ export function formatFileSize(bytes: number): string {
   if (bytes === 0) return "--";
   const units = ["B", "KB", "MB", "GB", "TB"];
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
+  return `${(bytes / 1024 ** i).toFixed(1)} ${units[i]}`;
 }
 
 export function formatFileDate(ms: number): string {
@@ -95,7 +95,10 @@ export function FileItemRow({
   };
 
   return (
+    // biome-ignore lint/a11y/useSemanticElements: row contains nested interactive controls
     <div
+      role="button"
+      tabIndex={0}
       draggable={!isRenaming}
       onDragStart={handleDragStart}
       onPointerDown={(e) => {
@@ -110,6 +113,13 @@ export function FileItemRow({
         }
       }}
       onDoubleClick={() => onOpen(item)}
+      onKeyDown={(e) => {
+        if (isRenaming || e.target !== e.currentTarget) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen(item);
+        }
+      }}
       onContextMenu={(e) => onContextMenu(e, item)}
       className={`group flex items-center px-2 py-1.5 text-xs select-none cursor-pointer touch-manipulation rounded-sm transition-colors ${
         isSelected

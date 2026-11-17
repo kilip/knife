@@ -1,14 +1,14 @@
-import { useState } from "react";
 import {
-  ChevronUp,
-  ChevronDown,
-  X,
-  Upload,
-  Download,
-  Check,
   AlertCircle,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Download,
   Loader2,
+  Upload,
+  X,
 } from "lucide-react";
+import { useState } from "react";
 import { formatFileSize } from "./FileItemRow";
 import type { FileTransferItem } from "./types";
 
@@ -39,8 +39,18 @@ export function TransferQueueDrawer({
   return (
     <div className="fixed bottom-4 right-4 z-40 w-80 sm:w-96 rounded-lg shadow-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-[var(--fg-base)] overflow-hidden transition-all duration-200">
       {/* Header bar */}
+      {/* biome-ignore lint/a11y/useSemanticElements: header bar contains nested clear button */}
       <div
+        role="button"
+        tabIndex={0}
         onClick={() => setIsExpanded(!isExpanded)}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setIsExpanded(!isExpanded);
+          }
+        }}
         className="px-3 py-2 bg-[var(--bg-base)] border-b border-[var(--border-subtle)] flex items-center justify-between cursor-pointer select-none"
       >
         <div className="flex items-center gap-2">

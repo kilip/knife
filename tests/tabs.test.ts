@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { loadTabs, saveTabs, getTabsPath, type TabData } from "../server/storage";
+import { join } from "node:path";
+import { getTabsPath, loadTabs, saveTabs, type TabData } from "../server/storage";
 
 describe("Tabs Storage and Empty State", () => {
   let tempDir: string;

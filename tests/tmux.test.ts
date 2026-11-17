@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeAll, afterAll } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import type { TabData } from "../server/storage";
 import {
   checkTmuxInstalled,
   createSession,
-  killSession,
   hasSession,
+  killSession,
   reconcileSessions,
 } from "../server/tmux";
-import type { TabData } from "../server/storage";
 
 describe("Tmux Subsystem & Session Reconciliation", () => {
   beforeAll(() => {

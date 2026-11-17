@@ -1,50 +1,49 @@
-import { existsSync, statSync, mkdirSync, writeFileSync, renameSync, rmSync } from "node:fs";
-import { join, dirname, basename, resolve, relative, isAbsolute } from "node:path";
-import { loadConfig, saveConfig, parseCliArgs, type KnifeConfig } from "./config";
-import { killSession, getTabCwd } from "./tmux";
-import { getUserShell, getShellName, isTmuxInstalled } from "./shell";
+import { existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import {
-  loadTabs,
-  saveTabs,
-  getTabsPath,
-  loadSettings,
-  saveSettings,
-  type TabData,
-} from "./storage";
-import {
-  generateSetupToken,
-  getActiveSetupToken,
-  verifySetupToken,
   consumeSetupToken,
   createSessionCookieHeader,
   createSessionToken,
-  getSessionFromCookie,
-  getGitHubOAuthUrl,
   exchangeGitHubCode,
   fetchGitHubUser,
+  generateSetupToken,
+  getActiveSetupToken,
+  getGitHubOAuthUrl,
   getPublicOrigin,
+  getSessionFromCookie,
+  verifySetupToken,
 } from "./auth";
-import { getClientIp } from "./proxy";
-import { shouldLogRequest, formatRequestLog } from "./request-log";
-import { websocketHandler, isAllowedOrigin, getActivePty, closeActivePty } from "./ws";
+import { type KnifeConfig, loadConfig, parseCliArgs, saveConfig } from "./config";
 import {
-  normalizePath,
-  isProtectedPath,
-  listDirectory,
-  statItem,
   createZipStream,
   getDefaultHome,
+  isProtectedPath,
+  listDirectory,
+  normalizePath,
+  statItem,
 } from "./fs";
-
+import { getClientIp } from "./proxy";
+import { formatRequestLog, shouldLogRequest } from "./request-log";
 import { handleServiceCommand } from "./service";
+import { getShellName, getUserShell, isTmuxInstalled } from "./shell";
 import {
-  getCurrentVersion,
+  getTabsPath,
+  loadSettings,
+  loadTabs,
+  saveSettings,
+  saveTabs,
+  type TabData,
+} from "./storage";
+import { getTabCwd, killSession } from "./tmux";
+import {
   checkLatestVersion,
   detectPackageManager,
   executePackageUpdate,
+  getCurrentVersion,
   isManagedService,
   triggerRestart,
 } from "./update";
+import { closeActivePty, getActivePty, isAllowedOrigin, websocketHandler } from "./ws";
 
 // Handle background service commands (install, uninstall, start, stop, status, restart)
 try {
@@ -629,7 +628,9 @@ try {
           currentTabs.splice(tabIndex, 1);
 
           // Re-index orders
-          currentTabs.forEach((t, i) => (t.order = i));
+          currentTabs.forEach((t, i) => {
+            t.order = i;
+          });
           saveTabs(currentTabs);
 
           return Response.json(

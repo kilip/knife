@@ -1,4 +1,4 @@
-import { existsSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { TabData } from "./storage";
 
@@ -161,7 +161,9 @@ export function reconcileSessions(savedTabs: TabData[]): TabData[] {
 
   // Ensure orders are sequential 0..N
   reconciled.sort((a, b) => a.order - b.order);
-  reconciled.forEach((t, i) => (t.order = i));
+  reconciled.forEach((t, i) => {
+    t.order = i;
+  });
 
   return reconciled;
 }

@@ -1,24 +1,24 @@
-import { useState, useRef, useEffect } from "react";
 import {
-  Plus,
-  X,
-  LogOut,
-  Keyboard,
   ArrowLeft,
   ArrowRight,
-  Maximize2,
-  Minimize2,
-  Folder,
   ArrowUpCircle,
   Command,
+  Folder,
+  Keyboard,
+  LogOut,
+  Maximize2,
+  Minimize2,
+  Plus,
   Settings as SettingsIcon,
+  X,
 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import { StatusIndicator } from "./StatusIndicator";
-import { ThemeSelector } from "./ThemeSelector";
-import { PwaInstallButton } from "./PwaInstallButton";
-import type { ConnectionStatus } from "./TerminalTab";
 import type { KnifeTheme } from "~/utils/themes";
+import { PwaInstallButton } from "./PwaInstallButton";
+import { StatusIndicator } from "./StatusIndicator";
+import type { ConnectionStatus } from "./TerminalTab";
+import { ThemeSelector } from "./ThemeSelector";
 
 export interface TabItem {
   id: string;
@@ -145,8 +145,18 @@ export function TabBar({
           return (
             <div
               key={tab.id}
+              role="tab"
+              aria-selected={isActive}
+              tabIndex={0}
               onClick={() => onSelectTab(tab.id)}
               onDoubleClick={() => handleStartRename(tab)}
+              onKeyDown={(e) => {
+                if (isEditing || e.target !== e.currentTarget) return;
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSelectTab(tab.id);
+                }
+              }}
               className={`group flex items-center gap-2 px-3 h-8.5 rounded-lg text-xs font-medium cursor-pointer transition-colors relative border ${
                 isActive
                   ? "bg-[var(--bg-base)] text-[var(--fg-base)] border-[var(--border)] shadow-xs"
@@ -188,6 +198,7 @@ export function TabBar({
               <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 transition-opacity">
                 {index > 0 && (
                   <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleMoveTab(index, -1);
@@ -200,6 +211,7 @@ export function TabBar({
                 )}
                 {index < tabs.length - 1 && (
                   <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleMoveTab(index, 1);
@@ -214,6 +226,7 @@ export function TabBar({
 
               {/* Close button */}
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   onCloseTab(tab.id);
@@ -229,6 +242,7 @@ export function TabBar({
 
         {/* New Tab Button */}
         <button
+          type="button"
           onClick={onCreateTab}
           className="flex items-center justify-center w-8 h-8 rounded-lg text-[var(--fg-muted)] hover:text-[var(--fg-base)] hover:bg-[var(--bg-hover)] border border-transparent hover:border-[var(--border)] transition-colors cursor-pointer shrink-0"
           title="New Tab (Alt+T)"
@@ -298,6 +312,7 @@ export function TabBar({
         <ThemeSelector currentTheme={theme} onSelectTheme={onSelectTheme} />
         {onToggleFileBrowser && (
           <button
+            type="button"
             onClick={onToggleFileBrowser}
             className={`p-2 rounded-lg border border-[var(--border)] transition-colors cursor-pointer ${
               isFileBrowserOpen
@@ -334,6 +349,7 @@ export function TabBar({
         </Link>
 
         <button
+          type="button"
           onClick={() => setShowShortcuts(!showShortcuts)}
           className="p-2 rounded-lg text-[var(--fg-muted)] hover:text-[var(--fg-base)] hover:bg-[var(--bg-hover)] border border-[var(--border)] transition-colors cursor-pointer"
           title="Keyboard Shortcuts"
@@ -348,6 +364,7 @@ export function TabBar({
         )}
 
         <button
+          type="button"
           onClick={onLogout}
           className="p-2 rounded-lg text-[var(--fg-muted)] hover:text-[var(--status-err)] hover:bg-[var(--bg-hover)] border border-[var(--border)] transition-colors cursor-pointer"
           title="Log Out"
@@ -366,6 +383,7 @@ export function TabBar({
                 Keyboard Shortcuts
               </h3>
               <button
+                type="button"
                 onClick={() => setShowShortcuts(false)}
                 className="p-1 rounded text-[var(--fg-muted)] hover:text-[var(--fg-base)] cursor-pointer"
               >

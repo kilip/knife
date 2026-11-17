@@ -1,15 +1,15 @@
-import { useRef } from "react";
 import {
-  FolderPlus,
-  FilePlus,
-  RefreshCw,
-  Compass,
   ArrowUp,
+  ChevronRight,
+  Compass,
   Eye,
   EyeOff,
+  FilePlus,
+  FolderPlus,
+  RefreshCw,
   Upload,
-  ChevronRight,
 } from "lucide-react";
+import { useRef } from "react";
 
 interface FileBrowserHeaderProps {
   currentPath: string;

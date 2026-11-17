@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { resolve, join } from "node:path";
+import { join, resolve } from "node:path";
 import { getServiceManager } from "./service/factory";
 import type { ServiceCliOptions } from "./service/types";
 

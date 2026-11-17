@@ -1,9 +1,9 @@
-import { describe, it, expect } from "bun:test";
-import { renderToString } from "react-dom/server";
-import React from "react";
-import { QuickKeysBar } from "../app/components/QuickKeysBar";
+import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import React from "react";
+import { renderToString } from "react-dom/server";
+import { QuickKeysBar } from "../app/components/QuickKeysBar";
 
 describe("QuickKeysBar & Terminal Keyboard Helpers", () => {
   it("renders all required quick keys: ESC, TAB, Ctrl+C, Ctrl+V, Up, Down", () => {

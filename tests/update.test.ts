@@ -1,15 +1,15 @@
-import { describe, expect, it, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, it } from "bun:test";
+import { EventEmitter } from "node:events";
 import {
-  parseSemver,
-  compareSemver,
-  detectPackageManager,
   checkLatestVersion,
   clearVersionCache,
-  getCurrentVersion,
+  compareSemver,
+  detectPackageManager,
   executePackageUpdate,
+  getCurrentVersion,
   type PackageManagerInfo,
+  parseSemver,
 } from "../server/update";
-import { EventEmitter } from "node:events";
 
 describe("Semver parsing and comparison", () => {
   it("parses valid standard semver strings", () => {

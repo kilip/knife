@@ -1,4 +1,4 @@
-import { Sparkles, RefreshCw, X } from "lucide-react";
+import { RefreshCw, Sparkles, X } from "lucide-react";
 
 interface PwaUpdateToastProps {
   onUpdate: () => void;
@@ -17,6 +17,7 @@ export function PwaUpdateToast({ onUpdate, onDismiss }: PwaUpdateToastProps) {
       </div>
       <div className="flex items-center gap-1.5 ml-2">
         <button
+          type="button"
           onClick={onUpdate}
           className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded bg-[var(--accent)] text-[var(--bg-base)] hover:opacity-90 transition-opacity cursor-pointer"
         >
@@ -24,6 +25,7 @@ export function PwaUpdateToast({ onUpdate, onDismiss }: PwaUpdateToastProps) {
           <span>Update</span>
         </button>
         <button
+          type="button"
           onClick={onDismiss}
           className="p-1 text-[var(--fg-muted)] hover:text-[var(--fg-base)] transition-colors cursor-pointer rounded"
           title="Dismiss"

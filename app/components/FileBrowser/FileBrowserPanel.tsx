@@ -1,12 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { X, Folder, AlertCircle } from "lucide-react";
-import { FileBrowserHeader } from "./FileBrowserHeader";
-import { FileList } from "./FileList";
-import { FileContextMenu } from "./FileContextMenu";
-import { FilePreviewModal } from "./FilePreviewModal";
+import { AlertCircle, Folder, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ConflictDialog } from "./ConflictDialog";
+import { FileBrowserHeader } from "./FileBrowserHeader";
+import { FileContextMenu } from "./FileContextMenu";
 import { shellEscape } from "./FileItemRow";
-import type { FsItem, SortField, SortDirection, ConflictResolution } from "./types";
+import { FileList } from "./FileList";
+import { FilePreviewModal } from "./FilePreviewModal";
+import type { ConflictResolution, FsItem, SortDirection, SortField } from "./types";
 
 interface FileBrowserPanelProps {
   isOpen: boolean;
@@ -114,6 +114,7 @@ export function FileBrowserPanel({
   );
 
   // Initial load
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reload only when panel opens or hidden-files toggle changes
   useEffect(() => {
     if (isOpen) {
       loadDirectory();
@@ -339,6 +340,8 @@ export function FileBrowserPanel({
   return (
     <>
       {/* Mobile Backdrop */}
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: backdrop overlay dismissed by click on mobile */}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: backdrop overlay */}
       <div
         className="fixed inset-0 z-40 bg-black/50 backdrop-blur-xs md:hidden"
         onClick={onClose}
@@ -432,6 +435,7 @@ export function FileBrowserPanel({
         </div>
 
         {/* Desktop Split-Pane Resize Handle */}
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: mouse-drag resize handle */}
         <div
           onMouseDown={handleMouseDownResize}
           className="hidden md:block absolute top-0 right-0 w-1.5 h-full cursor-col-resize hover:bg-[var(--accent)]/50 transition-colors z-50"

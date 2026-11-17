@@ -1,21 +1,21 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { TabBar, type TabItem } from "~/components/TabBar";
-import { TerminalTab, type ConnectionStatus, type TerminalActions } from "~/components/TerminalTab";
-import { QuickKeysBar } from "~/components/QuickKeysBar";
+import { Plus } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router";
 import { ConfirmModal } from "~/components/ConfirmModal";
-import { usePwa } from "~/hooks/usePwa";
-import { PwaUpdateToast } from "~/components/PwaUpdateToast";
-import { PwaOfflineBanner } from "~/components/PwaOfflineBanner";
 import { FileBrowserPanel } from "~/components/FileBrowser/FileBrowserPanel";
 import { TransferQueueDrawer } from "~/components/FileBrowser/TransferQueueDrawer";
-import { useFileTransfer } from "~/hooks/useFileTransfer";
-import { useSelfUpdate } from "~/hooks/useSelfUpdate";
+import { PwaOfflineBanner } from "~/components/PwaOfflineBanner";
+import { PwaUpdateToast } from "~/components/PwaUpdateToast";
+import { QuickKeysBar } from "~/components/QuickKeysBar";
 import { SelfUpdateModal } from "~/components/SelfUpdateModal";
-import { useNavigate } from "react-router";
-import { getTheme, type KnifeTheme } from "~/utils/themes";
+import { TabBar, type TabItem } from "~/components/TabBar";
+import { type ConnectionStatus, type TerminalActions, TerminalTab } from "~/components/TerminalTab";
+import { useFileTransfer } from "~/hooks/useFileTransfer";
+import { usePwa } from "~/hooks/usePwa";
+import { useSelfUpdate } from "~/hooks/useSelfUpdate";
 import { useSettings } from "~/hooks/useSettings";
 import { getTopLevelDir } from "~/utils/cwd";
-import { Plus } from "lucide-react";
+import { getTheme, type KnifeTheme } from "~/utils/themes";
 
 export default function Home() {
   const [tabs, setTabs] = useState<TabItem[]>([]);
@@ -432,6 +432,7 @@ export default function Home() {
   };
 
   // Global Keyboard Shortcuts
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyboard shortcut handlers are intentionally bound to tab/font state
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't trigger if user is typing in a form input/textarea (exempt xterm hidden helper textarea)

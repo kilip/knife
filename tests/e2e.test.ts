@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll } from "bun:test";
-import { existsSync, rmSync, mkdirSync } from "node:fs";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { hasSession } from "../server/tmux";
 import { createSessionToken } from "../server/auth";
+import { hasSession } from "../server/tmux";
 
 describe("Knife End-to-End System Tests", () => {
   const testPort = 3589;
@@ -56,6 +56,7 @@ describe("Knife End-to-End System Tests", () => {
       if (done) break;
       capturedStdout += decoder.decode(value, { stream: true });
       const match = capturedStdout.match(
+        // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI escape sequence match
         /One-time Setup Token:\s*(?:\x1b\[[0-9;]*m)*([a-f0-9]{32,64})/i,
       );
       if (match) {

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { getTopLevelDir } from "../app/utils/cwd";
 
 describe("CWD Top-Level Directory Resolution", () => {

@@ -1,6 +1,6 @@
-import { ArrowUp, ArrowDown, Folder } from "lucide-react";
+import { ArrowDown, ArrowUp, Folder } from "lucide-react";
 import { FileItemRow } from "./FileItemRow";
-import type { FsItem, SortField, SortDirection } from "./types";
+import type { FsItem, SortDirection, SortField } from "./types";
 
 interface FileListProps {
   items: FsItem[];
@@ -96,14 +96,15 @@ export function FileList({
       <div className="flex-1 overflow-y-auto divide-y divide-[var(--border-subtle)]/30 p-1">
         {/* Parent Directory (..) Row */}
         {parent !== null && (
-          <div
+          <button
+            type="button"
             onDoubleClick={onNavigateParent}
             onClick={onNavigateParent}
-            className="flex items-center px-2 py-1.5 text-xs text-[var(--fg-muted)] hover:text-[var(--fg-base)] hover:bg-[var(--bg-hover)] cursor-pointer touch-manipulation rounded-sm select-none"
+            className="w-full text-left flex items-center px-2 py-1.5 text-xs text-[var(--fg-muted)] hover:text-[var(--fg-base)] hover:bg-[var(--bg-hover)] cursor-pointer touch-manipulation rounded-sm select-none"
           >
             <Folder className="w-4 h-4 text-[var(--accent)] mr-2 shrink-0" />
             <span className="font-mono font-medium">..</span>
-          </div>
+          </button>
         )}
 
         {sortedItems.map((item) => (

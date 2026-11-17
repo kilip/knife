@@ -64,6 +64,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
         <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: static inline theme bootstrap script */}
         <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
         <Meta />
         <Links />

@@ -1,13 +1,13 @@
-import { useState, useEffect, useRef } from "react";
-import { Terminal } from "@xterm/xterm";
+import { CanvasAddon } from "@xterm/addon-canvas";
 import { FitAddon } from "@xterm/addon-fit";
+import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
-import { CanvasAddon } from "@xterm/addon-canvas";
-import { Unicode11Addon } from "@xterm/addon-unicode11";
+import { Terminal } from "@xterm/xterm";
 import { Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
-import { type KnifeTheme } from "~/utils/themes";
+import type { KnifeTheme } from "~/utils/themes";
 
 export type ConnectionStatus = "connecting" | "connected" | "reconnecting" | "disconnected";
 
@@ -231,6 +231,7 @@ export function TerminalTab({
     }
   }, [isActive]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: initialize terminal and WebSocket once per tabId
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -438,7 +439,7 @@ export function TerminalTab({
 
         // If not intentional client close (code 1000) and shell did not cleanly exit
         if (event.code !== 1000 && shouldReconnect) {
-          const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 15000);
+          const delay = Math.min(1000 * 1.5 ** reconnectAttempts, 15000);
           reconnectAttempts++;
           reconnectTimer = setTimeout(connect, delay);
         } else {
@@ -585,6 +586,7 @@ export function TerminalTab({
   }, [tabId]);
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: drag-and-drop file upload container
     <div
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}

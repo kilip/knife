@@ -1,10 +1,10 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import {
+  loadConfig,
   parseCliArgs,
+  resolveConfigPath,
   validateHost,
   validatePort,
-  loadConfig,
-  resolveConfigPath,
 } from "../server/config";
 
 describe("Server Config & CLI Parser", () => {

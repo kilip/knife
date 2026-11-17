@@ -1,25 +1,25 @@
-import { useState, useEffect, useCallback } from "react";
-import { Link, useNavigate } from "react-router";
 import {
-  ArrowLeft,
-  Palette,
-  Terminal as TerminalIcon,
-  Sliders,
-  User,
-  Check,
-  RotateCcw,
-  LogOut,
-  Laptop,
-  CheckCircle2,
-  Loader2,
   AlertTriangle,
-  RefreshCw,
+  ArrowLeft,
   ArrowUpCircle,
+  Check,
+  CheckCircle2,
+  Laptop,
+  Loader2,
+  LogOut,
+  Palette,
+  RefreshCw,
+  RotateCcw,
+  Sliders,
+  Terminal as TerminalIcon,
+  User,
 } from "lucide-react";
-import { THEMES } from "~/utils/themes";
-import { useSettings, FONT_PRESETS } from "~/hooks/useSettings";
-import { useSelfUpdate } from "~/hooks/useSelfUpdate";
+import { useCallback, useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router";
 import { SelfUpdateModal } from "~/components/SelfUpdateModal";
+import { useSelfUpdate } from "~/hooks/useSelfUpdate";
+import { FONT_PRESETS, useSettings } from "~/hooks/useSettings";
+import { THEMES } from "~/utils/themes";
 
 type SettingsTab = "appearance" | "terminal" | "behavior" | "system";
 

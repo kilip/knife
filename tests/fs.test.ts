@@ -1,14 +1,14 @@
-import { describe, it, expect, beforeAll, afterAll } from "bun:test";
-import { mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
+import { join } from "node:path";
 import {
-  normalizePath,
-  isProtectedPath,
-  listDirectory,
-  statItem,
   createZipStream,
   getDefaultHome,
+  isProtectedPath,
+  listDirectory,
+  normalizePath,
+  statItem,
 } from "../server/fs";
 import { getTabCwd } from "../server/tmux";
 

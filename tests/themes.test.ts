@@ -1,5 +1,5 @@
-import { describe, it, expect } from "bun:test";
-import { THEMES, DEFAULT_THEME_ID, getTheme } from "../app/utils/themes";
+import { describe, expect, it } from "bun:test";
+import { DEFAULT_THEME_ID, getTheme, THEMES } from "../app/utils/themes";
 
 describe("Theme System", () => {
   it("includes all 5 required built-in themes", () => {

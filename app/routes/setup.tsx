@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
-import { Copy, Check, ShieldCheck, ArrowRight } from "lucide-react";
-import { THEMES, applyTheme } from "~/utils/themes";
+import { ArrowRight, Check, Copy, ShieldCheck } from "lucide-react";
+import { useEffect, useState } from "react";
+import { applyTheme, THEMES } from "~/utils/themes";
 
 export default function Setup() {
   const [token, setToken] = useState("");
@@ -27,8 +27,8 @@ export default function Setup() {
     }
 
     // Default publicDomain to current window host if not already filled
-    if (window.location.host && !publicDomain) {
-      setPublicDomain(window.location.host);
+    if (window.location.host) {
+      setPublicDomain((prev) => prev || window.location.host);
       setPublicScheme(window.location.protocol === "https:" ? "https" : "http");
     }
 
@@ -124,10 +124,14 @@ export default function Setup() {
         <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-5">
           {/* Setup Token */}
           <div>
-            <label className="block text-xs font-semibold text-[var(--fg-base)] uppercase tracking-wider mb-1.5">
+            <label
+              htmlFor="setup-token"
+              className="block text-xs font-semibold text-[var(--fg-base)] uppercase tracking-wider mb-1.5"
+            >
               One-Time Setup Token <span className="text-[var(--status-err)]">*</span>
             </label>
             <input
+              id="setup-token"
               type="text"
               required
               value={token}
@@ -143,10 +147,14 @@ export default function Setup() {
           {/* Public Domain & Scheme */}
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-2">
-              <label className="block text-xs font-semibold text-[var(--fg-base)] uppercase tracking-wider mb-1.5">
+              <label
+                htmlFor="setup-public-domain"
+                className="block text-xs font-semibold text-[var(--fg-base)] uppercase tracking-wider mb-1.5"
+              >
                 Public Domain <span className="text-[var(--status-err)]">*</span>
               </label>
               <input
+                id="setup-public-domain"
                 type="text"
                 required
                 value={publicDomain}
@@ -156,10 +164,14 @@ export default function Setup() {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-[var(--fg-base)] uppercase tracking-wider mb-1.5">
+              <label
+                htmlFor="setup-public-scheme"
+                className="block text-xs font-semibold text-[var(--fg-base)] uppercase tracking-wider mb-1.5"
+              >
                 Scheme
               </label>
               <select
+                id="setup-public-scheme"
                 value={publicScheme}
                 onChange={(e) => setPublicScheme(e.target.value as "https" | "http")}
                 className="w-full px-3 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg-base)] text-xs text-[var(--fg-base)] focus:border-[var(--accent)] outline-none transition-colors cursor-pointer"
@@ -195,10 +207,14 @@ export default function Setup() {
           {/* GitHub OAuth Credentials */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-[var(--fg-base)] uppercase tracking-wider mb-1.5">
+              <label
+                htmlFor="setup-github-client-id"
+                className="block text-xs font-semibold text-[var(--fg-base)] uppercase tracking-wider mb-1.5"
+              >
                 GitHub Client ID <span className="text-[var(--status-err)]">*</span>
               </label>
               <input
+                id="setup-github-client-id"
                 type="text"
                 required
                 value={githubClientId}
@@ -208,10 +224,14 @@ export default function Setup() {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-[var(--fg-base)] uppercase tracking-wider mb-1.5">
+              <label
+                htmlFor="setup-github-client-secret"
+                className="block text-xs font-semibold text-[var(--fg-base)] uppercase tracking-wider mb-1.5"
+              >
                 GitHub Client Secret <span className="text-[var(--status-err)]">*</span>
               </label>
               <input
+                id="setup-github-client-secret"
                 type="password"
                 required
                 value={githubClientSecret}
@@ -224,11 +244,15 @@ export default function Setup() {
 
           {/* Authorized Username */}
           <div>
-            <label className="block text-xs font-semibold text-[var(--fg-base)] uppercase tracking-wider mb-1.5">
+            <label
+              htmlFor="setup-allowed-username"
+              className="block text-xs font-semibold text-[var(--fg-base)] uppercase tracking-wider mb-1.5"
+            >
               Allowed GitHub Username <span className="text-[var(--status-err)]">*</span>
             </label>
             <div className="relative">
               <input
+                id="setup-allowed-username"
                 type="text"
                 required
                 value={allowedUsername}
@@ -247,9 +271,9 @@ export default function Setup() {
 
           {/* Theme Selection */}
           <div>
-            <label className="block text-xs font-semibold text-[var(--fg-base)] uppercase tracking-wider mb-1.5">
+            <span className="block text-xs font-semibold text-[var(--fg-base)] uppercase tracking-wider mb-1.5">
               Default Theme
-            </label>
+            </span>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {THEMES.map((t) => {
                 const isSelected = t.id === themeId;
@@ -277,10 +301,14 @@ export default function Setup() {
 
           {/* Trusted Reverse Proxy CIDRs */}
           <div>
-            <label className="block text-xs font-semibold text-[var(--fg-base)] uppercase tracking-wider mb-1.5">
+            <label
+              htmlFor="setup-trusted-proxies"
+              className="block text-xs font-semibold text-[var(--fg-base)] uppercase tracking-wider mb-1.5"
+            >
               Trusted Reverse Proxy IPs / CIDRs
             </label>
             <input
+              id="setup-trusted-proxies"
               type="text"
               value={trustedProxies}
               onChange={(e) => setTrustedProxies(e.target.value)}

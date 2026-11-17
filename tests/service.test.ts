@@ -4,6 +4,8 @@ import { join } from "node:path";
 import {
   buildResolvedServiceContext,
   buildServicePath,
+  type CommandResult,
+  type CommandRunner,
   discoverExistingConfig,
   escapeSystemdArg,
   escapeXml,
@@ -19,8 +21,6 @@ import {
   resolveBunExecutable,
   SystemdServiceManager,
   WindowsServiceManager,
-  type CommandResult,
-  type CommandRunner,
 } from "../server/service";
 
 class MockCommandRunner implements CommandRunner {

@@ -1,5 +1,5 @@
-import { useState } from "react";
 import { AlertTriangle } from "lucide-react";
+import { useState } from "react";
 import type { ConflictResolution } from "./types";
 
 interface ConflictDialogProps {

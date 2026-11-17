@@ -1,5 +1,5 @@
+import { Copy, Download, Edit2, Terminal, Trash2 } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { Download, Terminal, Copy, Edit2, Trash2 } from "lucide-react";
 import type { FsItem } from "./types";
 
 interface FileContextMenuProps {

@@ -1,17 +1,17 @@
 import {
   existsSync,
-  statSync,
   lstatSync,
-  readdirSync,
   mkdirSync,
-  writeFileSync,
+  readdirSync,
   renameSync,
   rmSync,
+  statSync,
+  writeFileSync,
 } from "node:fs";
-import { resolve, dirname, basename, join, relative } from "node:path";
+import os from "node:os";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { resolveConfigPath } from "./config";
 import { resolveDataDir } from "./storage";
-import os from "node:os";
 
 export const SYSTEM_PROTECTED_PATHS = [
   "/",
@@ -226,7 +226,7 @@ export async function createZipStream(
   } else {
     // Find common parent directory
     const partsList = normalized.map((p) => p.split("/"));
-    let commonParts: string[] = [];
+    const commonParts: string[] = [];
     const first = partsList[0];
     for (let i = 0; i < first.length; i++) {
       const part = first[i];

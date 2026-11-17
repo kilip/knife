@@ -1,5 +1,5 @@
-import { describe, it, expect } from "bun:test";
-import { isValidIpv4, isValidIpv6, isIpTrusted, getClientIp } from "../server/proxy";
+import { describe, expect, it } from "bun:test";
+import { getClientIp, isIpTrusted, isValidIpv4, isValidIpv6 } from "../server/proxy";
 
 describe("Proxy & IP Verification", () => {
   it("validates IPv4 addresses accurately", () => {

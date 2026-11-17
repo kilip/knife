@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from "react";
-import { Palette, Check } from "lucide-react";
-import { THEMES, type KnifeTheme } from "~/utils/themes";
+import { Check, Palette } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { type KnifeTheme, THEMES } from "~/utils/themes";
 
 interface ThemeSelectorProps {
   currentTheme: KnifeTheme;
@@ -26,6 +26,7 @@ export function ThemeSelector({ currentTheme, onSelectTheme }: ThemeSelectorProp
   return (
     <div className="relative inline-block" ref={containerRef}>
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-[var(--fg-muted)] hover:text-[var(--fg-base)] hover:bg-[var(--bg-hover)] border border-[var(--border)] transition-colors cursor-pointer"
         title="Switch Theme"
@@ -44,6 +45,7 @@ export function ThemeSelector({ currentTheme, onSelectTheme }: ThemeSelectorProp
               const isSelected = theme.id === currentTheme.id;
               return (
                 <button
+                  type="button"
                   key={theme.id}
                   onClick={() => {
                     onSelectTheme(theme.id);

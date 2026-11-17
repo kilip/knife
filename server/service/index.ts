@@ -5,15 +5,15 @@ import { getServiceManager } from "./factory";
 import { defaultRunner } from "./runner";
 import type { CommandRunner, ServiceAction, ServiceCliOptions, ServiceStatusResult } from "./types";
 
-export * from "./types";
-export * from "./paths";
 export * from "./config";
-export { SystemdServiceManager } from "./managers/systemd";
-export { LaunchdServiceManager } from "./managers/launchd";
-export { WindowsServiceManager } from "./managers/windows";
-export * from "./templates";
 export * from "./factory";
+export { LaunchdServiceManager } from "./managers/launchd";
+export { SystemdServiceManager } from "./managers/systemd";
+export { WindowsServiceManager } from "./managers/windows";
+export * from "./paths";
 export * from "./runner";
+export * from "./templates";
+export * from "./types";
 
 const VALID_ACTIONS: ServiceAction[] = [
   "install",

@@ -1,17 +1,17 @@
-import { useRef, useEffect, useState } from "react";
 import {
-  X,
-  RefreshCw,
-  AlertTriangle,
-  CheckCircle2,
-  Terminal,
-  Copy,
-  Check,
-  ArrowUpCircle,
-  Server,
-  Layers,
   AlertCircle,
+  AlertTriangle,
+  ArrowUpCircle,
+  Check,
+  CheckCircle2,
+  Copy,
+  Layers,
+  RefreshCw,
+  Server,
+  Terminal,
+  X,
 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import type { UpdateInfo, UpdateStatus } from "~/hooks/useSelfUpdate";
 
 interface SelfUpdateModalProps {
@@ -43,6 +43,7 @@ export function SelfUpdateModal({
   const [copied, setCopied] = useState(false);
 
   // Auto-scroll logs
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll to bottom when logs change
   useEffect(() => {
     if (terminalLogRef.current) {
       terminalLogRef.current.scrollTop = terminalLogRef.current.scrollHeight;
@@ -73,6 +74,7 @@ export function SelfUpdateModal({
           </div>
           {!isBusy && (
             <button
+              type="button"
               onClick={onClose}
               className="p-1 rounded text-[var(--fg-muted)] hover:text-[var(--fg-base)] hover:bg-[var(--bg-hover)] transition-colors cursor-pointer"
             >
@@ -208,6 +210,7 @@ export function SelfUpdateModal({
                 className="w-full h-36 rounded-lg bg-black/60 border border-[var(--border)] p-2.5 font-mono text-[11px] overflow-y-auto space-y-1 text-neutral-300 leading-relaxed scrollbar-thin"
               >
                 {logs.map((log, idx) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: append-only log lines
                   <div key={idx} className="break-all whitespace-pre-wrap">
                     {log}
                   </div>

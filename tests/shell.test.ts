@@ -1,7 +1,7 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { existsSync } from "node:fs";
-import { getUserShell, getShellName, isTmuxInstalled } from "../server/shell";
 import { PtySession } from "../server/pty";
+import { getShellName, getUserShell, isTmuxInstalled } from "../server/shell";
 
 describe("User Shell Detection and Direct PTY", () => {
   it("resolves a valid, executable user shell", () => {

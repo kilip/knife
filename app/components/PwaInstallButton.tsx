@@ -7,6 +7,7 @@ interface PwaInstallButtonProps {
 export function PwaInstallButton({ onInstall }: PwaInstallButtonProps) {
   return (
     <button
+      type="button"
       onClick={onInstall}
       className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded border border-[var(--border)] bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] text-[var(--fg-base)] transition-colors cursor-pointer select-none"
       title="Install Knife as standalone desktop/mobile app"

@@ -1,5 +1,6 @@
-import React, { useCallback } from "react";
-import { ArrowUp, ArrowDown, ChevronDown } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown } from "lucide-react";
+import type React from "react";
+import { useCallback } from "react";
 
 export interface QuickKeysBarProps {
   onEsc: () => void;

@@ -45,11 +45,13 @@ export default function Login() {
 
         <div className="mt-8 flex flex-col gap-3">
           <button
+            type="button"
             onClick={handleSignIn}
             className="flex items-center justify-center gap-3 w-full py-3 rounded-xl bg-[var(--accent)] text-[var(--bg-base)] font-semibold text-sm hover:opacity-90 transition-opacity cursor-pointer shadow-md"
           >
             {/* GitHub SVG Icon */}
             <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+              <title>GitHub</title>
               <path
                 fillRule="evenodd"
                 clipRule="evenodd"
