@@ -12,7 +12,8 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "paths": {
-      "~/*": ["./app/*"]
+      "~/*": ["./app/*"],
+      "@shared/*": ["./shared/*"]
     },
     "rootDirs": [".", "./.react-router/types"]
   }

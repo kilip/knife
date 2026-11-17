@@ -1,3 +1,5 @@
+import type { MeResponse, TabCwdResponse } from "@shared/api";
+import type { TabData } from "@shared/tabs";
 import { Plus } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
@@ -8,7 +10,7 @@ import { PwaOfflineBanner } from "~/components/PwaOfflineBanner";
 import { PwaUpdateToast } from "~/components/PwaUpdateToast";
 import { QuickKeysBar } from "~/components/QuickKeysBar";
 import { SelfUpdateModal } from "~/components/SelfUpdateModal";
-import { TabBar, type TabItem } from "~/components/TabBar";
+import { TabBar } from "~/components/TabBar";
 import { type ConnectionStatus, type TerminalActions, TerminalTab } from "~/components/TerminalTab";
 import { useFileTransfer } from "~/hooks/useFileTransfer";
 import { usePwa } from "~/hooks/usePwa";
@@ -18,7 +20,7 @@ import { getTopLevelDir } from "~/utils/cwd";
 import { getTheme, type KnifeTheme } from "~/utils/themes";
 
 export default function Home() {
-  const [tabs, setTabs] = useState<TabItem[]>([]);
+  const [tabs, setTabs] = useState<TabData[]>([]);
   const [activeTabId, setActiveTabId] = useState<string>("");
   const [statuses, setStatuses] = useState<Record<string, ConnectionStatus>>({});
   const navigate = useNavigate();
@@ -26,7 +28,7 @@ export default function Home() {
   const theme = getTheme(settings.theme);
   const [username, setUsername] = useState<string>("");
   const [shellName, setShellName] = useState<string>("Shell");
-  const [tabToClose, setTabToClose] = useState<TabItem | null>(null);
+  const [tabToClose, setTabToClose] = useState<TabData | null>(null);
   const customTabsRef = useRef<Set<string>>(new Set());
   const closingTabsRef = useRef<Set<string>>(new Set());
   const fontSize = settings.fontSize;
@@ -169,7 +171,7 @@ export default function Home() {
       try {
         const res = await fetch(`/api/tabs/${activeTabId}/cwd`);
         if (res.ok) {
-          const data = await res.json();
+          const data = (await res.json()) as TabCwdResponse;
           uploadFiles(data.cwd || "", files);
         } else {
           uploadFiles("", files);
@@ -228,8 +230,8 @@ export default function Home() {
         }
         return res.json();
       })
-      .then((data) => {
-        if (data?.authenticated) {
+      .then((data: MeResponse | null) => {
+        if (data?.authenticated && data.username) {
           setUsername(data.username);
           if (data.shellName) {
             setShellName(data.shellName);
@@ -283,7 +285,7 @@ export default function Home() {
       try {
         const res = await fetch(`/api/tabs/${activeTabId}/cwd`);
         if (!res.ok) return;
-        const data = await res.json();
+        const data = (await res.json()) as TabCwdResponse;
         if (!data?.cwd) return;
 
         const topLevel = getTopLevelDir(data.cwd);
@@ -312,7 +314,7 @@ export default function Home() {
       body: JSON.stringify({ name: `${shellName} ${nextIndex}` }),
     })
       .then((res) => res.json())
-      .then((newTab: TabItem) => {
+      .then((newTab: TabData) => {
         if (newTab && newTab.id) {
           customTabsRef.current.delete(newTab.id);
           setTabs((prev) => [...prev, newTab]);
@@ -364,7 +366,7 @@ export default function Home() {
           if (Array.isArray(data.remainingTabs)) {
             setTabs(data.remainingTabs);
             if (activeTabId === closedId) {
-              const exists = data.remainingTabs.some((t: TabItem) => t.id === nextActiveId);
+              const exists = data.remainingTabs.some((t: TabData) => t.id === nextActiveId);
               setActiveTabId(exists ? nextActiveId : data.remainingTabs[0]?.id || "");
             }
           } else {
@@ -408,7 +410,7 @@ export default function Home() {
       body: JSON.stringify({ name: newName }),
     })
       .then((res) => res.json())
-      .then((updated: TabItem) => {
+      .then((updated: TabData) => {
         setTabs((prev) =>
           prev.map((t) => (t.id === id ? { ...t, name: updated.name || newName } : t)),
         );
@@ -417,7 +419,7 @@ export default function Home() {
   };
 
   // Reorder tabs
-  const handleReorderTabs = (newTabs: TabItem[]) => {
+  const handleReorderTabs = (newTabs: TabData[]) => {
     setTabs(newTabs);
     fetch("/api/tabs/reorder", {
       method: "POST",

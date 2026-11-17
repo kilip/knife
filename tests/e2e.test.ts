@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { ApiErrorResponse, TabCwdResponse } from "@shared/api";
+import type { TabData } from "@shared/tabs";
 import { createSessionToken } from "../server/auth";
 
 describe("Knife End-to-End System Tests", () => {
@@ -304,10 +306,7 @@ describe("Knife End-to-End System Tests", () => {
       body: JSON.stringify({ name: "Work Tab" }),
     });
     expect(createRes.status).toBe(201);
-    const createdTab = (await createRes.json()) as {
-      id: string;
-      name: string;
-    };
+    const createdTab = (await createRes.json()) as TabData;
     expect(createdTab.name).toBe("Work Tab");
     expect("sessionName" in createdTab).toBe(false);
 
@@ -383,7 +382,7 @@ describe("Knife End-to-End System Tests", () => {
     const remainingTabsRes = await fetch(`http://127.0.0.1:${testPort}/api/tabs`, {
       headers: { Cookie: cookieHeader },
     });
-    const remainingTabs = (await remainingTabsRes.json()) as Array<{ id: string }>;
+    const remainingTabs = (await remainingTabsRes.json()) as TabData[];
     expect(remainingTabs.some((t) => t.id === createdTab.id)).toBe(false);
   });
   it("supports file browser API, upload, download, streaming archive, and CWD synchronization", async () => {
@@ -399,7 +398,7 @@ describe("Knife End-to-End System Tests", () => {
       headers: { Cookie: cookieHeader },
     });
     expect(tabsRes.status).toBe(200);
-    const tabs = (await tabsRes.json()) as Array<{ id: string }>;
+    const tabs = (await tabsRes.json()) as TabData[];
     expect(Array.isArray(tabs)).toBe(true);
     expect(tabs.length).toBeGreaterThan(0);
     const targetTab = tabs[0];
@@ -408,7 +407,7 @@ describe("Knife End-to-End System Tests", () => {
       headers: { Cookie: cookieHeader },
     });
     expect(cwdRes.status).toBe(200);
-    const cwdData = (await cwdRes.json()) as { id: string; cwd: string };
+    const cwdData = (await cwdRes.json()) as TabCwdResponse;
     expect(cwdData.id).toBe(targetTab.id);
     expect(cwdData.cwd).toBeDefined();
 
@@ -818,7 +817,7 @@ describe("Knife End-to-End System Tests", () => {
     const tabsRes = await fetch(`http://127.0.0.1:${testPort}/api/tabs`, {
       headers: { Cookie: cookieHeader },
     });
-    const tabs = (await tabsRes.json()) as Array<{ id: string }>;
+    const tabs = (await tabsRes.json()) as TabData[];
 
     for (const tab of tabs) {
       const delRes = await fetch(`http://127.0.0.1:${testPort}/api/tabs/${tab.id}`, {
@@ -997,7 +996,7 @@ describe("Knife End-to-End System Tests", () => {
         body: JSON.stringify({ name: "Should Fail" }),
       });
       expect(failRes.status).toBe(500);
-      const failBody = (await failRes.json()) as { error?: string };
+      const failBody = (await failRes.json()) as Partial<ApiErrorResponse>;
       expect(typeof failBody.error).toBe("string");
 
       const afterRes = await fetch(`http://127.0.0.1:${testPort}/api/tabs`, {

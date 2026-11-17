@@ -1,3 +1,5 @@
+import type { MeResponse } from "@shared/api";
+import type { TabData } from "@shared/tabs";
 import { Hono } from "hono";
 import { THEME_MAP } from "../app/utils/themes";
 import {
@@ -18,7 +20,7 @@ import type { KnifeConfig } from "./config";
 import { createFsRoutes } from "./features/fs/routes";
 import { serveStaticFile } from "./features/static/serve";
 import { createTabsRoutes } from "./features/tabs/routes";
-import { loadSettings, saveSettings, type TabData } from "./features/tabs/store";
+import { loadSettings, saveSettings } from "./features/tabs/store";
 import { getShellName, getUserShell } from "./features/terminal/shell";
 import { createUpdateRoutes } from "./features/update/routes";
 import { createRateLimiter } from "./middleware/rate-limit";
@@ -294,13 +296,14 @@ export function createApp(deps: AppDeps) {
   app.all("/api/me", (c) => {
     const cfg = deps.getConfig();
     const currentSession = c.get("session")!;
-    return c.json({
+    const payload: MeResponse = {
       authenticated: true,
       username: currentSession.username,
       theme: cfg.theme,
       shell: getUserShell(),
       shellName: getShellName(),
-    });
+    };
+    return c.json(payload);
   });
 
   // Theme preference endpoint

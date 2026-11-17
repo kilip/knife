@@ -1,3 +1,4 @@
+import type { ApiErrorResponse, FsListResponse, TabCwdResponse } from "@shared/api";
 import { AlertCircle, Folder, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ConflictDialog } from "./ConflictDialog";
@@ -97,10 +98,10 @@ export function FileBrowserPanel({
         const url = `/api/fs/list?path=${encodeURIComponent(path || currentPath || "")}&hidden=${showHidden}`;
         const res = await fetch(url);
         if (!res.ok) {
-          const errJson = await res.json().catch(() => ({}));
+          const errJson = (await res.json().catch(() => ({}))) as Partial<ApiErrorResponse>;
           throw new Error(errJson.error || `HTTP ${res.status}`);
         }
-        const data = await res.json();
+        const data = (await res.json()) as FsListResponse;
         setCurrentPath(data.path);
         setParentPath(data.parent);
         setItems(data.items);
@@ -128,7 +129,7 @@ export function FileBrowserPanel({
     try {
       const res = await fetch(`/api/tabs/${activeTabId}/cwd`);
       if (res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as TabCwdResponse;
         if (data.cwd) {
           loadDirectory(data.cwd);
         }

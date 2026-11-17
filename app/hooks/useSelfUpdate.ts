@@ -1,14 +1,7 @@
+import type { UpdateInfo } from "@shared/api";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export interface UpdateInfo {
-  currentVersion: string;
-  latestVersion: string;
-  updateAvailable: boolean;
-  cached?: boolean;
-  isService: boolean;
-  activeTabsCount: number;
-  command: string;
-}
+export type { UpdateInfo };
 
 export type UpdateStatus =
   | "idle"

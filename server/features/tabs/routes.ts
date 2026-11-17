@@ -1,8 +1,9 @@
+import type { TabData } from "@shared/tabs";
 import { Hono } from "hono";
 import { getDefaultHome } from "../fs/paths";
 import { getShellName } from "../terminal/shell";
 import { closeActivePty, getActivePty } from "../terminal/ws";
-import { saveTabs, type TabData } from "./store";
+import { saveTabs } from "./store";
 
 export interface TabsRoutesDeps {
   getTabs: () => TabData[];

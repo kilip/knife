@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getTabsPath, loadTabs, saveTabs, type TabData } from "../server/features/tabs/store";
+import type { TabData } from "@shared/tabs";
+import { getTabsPath, loadTabs, saveTabs } from "../server/features/tabs/store";
 
 describe("Tabs Storage and Empty State", () => {
   let tempDir: string;

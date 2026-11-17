@@ -1,12 +1,6 @@
-export interface FsItem {
-  name: string;
-  path: string;
-  size: number;
-  mtime: number;
-  isDirectory: boolean;
-  isSymlink: boolean;
-  mode: number;
-}
+import type { FsItem } from "@shared/api";
+
+export type { FsItem };
 
 export type SortField = "name" | "size" | "mtime";
 export type SortDirection = "asc" | "desc";

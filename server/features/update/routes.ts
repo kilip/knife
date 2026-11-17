@@ -1,3 +1,4 @@
+import type { UpdateCheckResponse } from "@shared/api";
 import { Hono } from "hono";
 import {
   checkLatestVersion,
@@ -23,7 +24,7 @@ export function createUpdateRoutes(deps: UpdateRoutesDeps) {
     const activeTabsCount = deps.getTabsCount();
     const pkgManager = detectPackageManager();
 
-    return c.json({
+    const payload: UpdateCheckResponse = {
       currentVersion: checkRes.currentVersion,
       latestVersion: checkRes.latestVersion,
       updateAvailable: checkRes.updateAvailable,
@@ -31,7 +32,8 @@ export function createUpdateRoutes(deps: UpdateRoutesDeps) {
       isService,
       activeTabsCount,
       command: `${pkgManager.command} ${pkgManager.args.join(" ")}`,
-    });
+    };
+    return c.json(payload);
   });
 
   router.post("/apply", async (c) => {

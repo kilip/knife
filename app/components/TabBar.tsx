@@ -1,3 +1,4 @@
+import type { TabData } from "@shared/tabs";
 import {
   ArrowLeft,
   ArrowRight,
@@ -20,14 +21,8 @@ import { StatusIndicator } from "./StatusIndicator";
 import type { ConnectionStatus } from "./TerminalTab";
 import { ThemeSelector } from "./ThemeSelector";
 
-export interface TabItem {
-  id: string;
-  name: string;
-  order: number;
-}
-
 interface TabBarProps {
-  tabs: TabItem[];
+  tabs: TabData[];
   activeTabId: string;
   statuses: Record<string, ConnectionStatus>;
   theme: KnifeTheme;
@@ -42,7 +37,7 @@ interface TabBarProps {
   onCreateTab: () => void;
   onCloseTab: (id: string) => void;
   onRenameTab: (id: string, newName: string) => void;
-  onReorderTabs: (newTabs: TabItem[]) => void;
+  onReorderTabs: (newTabs: TabData[]) => void;
   onSelectTheme: (themeId: string) => void;
   onLogout: () => void;
   isInstallable?: boolean;
@@ -101,7 +96,7 @@ export function TabBar({
     }
   }, [editingTabId]);
 
-  const handleStartRename = (tab: TabItem) => {
+  const handleStartRename = (tab: TabData) => {
     setEditingTabId(tab.id);
     setEditName(tab.name);
   };

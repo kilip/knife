@@ -1,21 +1,11 @@
 import { existsSync, lstatSync, readdirSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import type { FsItem, FsListResponse } from "@shared/api";
 import { normalizePath } from "./paths";
 
-export interface FsItem {
-  name: string;
-  path: string;
-  size: number;
-  mtime: number;
-  isDirectory: boolean;
-  isSymlink: boolean;
-  mode: number;
-}
+export type { FsItem };
 
-export function listDirectory(
-  targetDir: string,
-  includeHidden = false,
-): { path: string; parent: string | null; items: FsItem[] } {
+export function listDirectory(targetDir: string, includeHidden = false): FsListResponse {
   const norm = normalizePath(targetDir);
   if (!existsSync(norm)) {
     throw new Error(`Directory not found: ${norm}`);

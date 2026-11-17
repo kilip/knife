@@ -7,15 +7,11 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
+import type { TabData } from "@shared/tabs";
 import { resolveConfigPath } from "../../config";
 import { getShellName } from "../terminal/shell";
 
-export interface TabData {
-  id: string;
-  name: string;
-  order: number;
-  createdAt: number;
-}
+export type { TabData };
 
 export interface UserSettings {
   theme: string;
