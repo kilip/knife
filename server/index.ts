@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { THEME_MAP } from "../app/utils/themes";
 import {
   consumeSetupToken,
   createSessionCookieHeader,
@@ -956,11 +957,15 @@ try {
       // 8. Theme preference endpoint
       if (url.pathname === "/api/theme") {
         if (req.method === "POST") {
-          const body = (await req.json().catch(() => ({}))) as { theme?: string };
-          if (body.theme && typeof body.theme === "string") {
-            config.theme = body.theme;
-            saveConfig(config, configPath);
+          if (!currentSession) {
+            return Response.json({ error: "Unauthorized" }, { status: 401, headers: secHeaders });
           }
+          const body = (await req.json().catch(() => ({}))) as { theme?: unknown };
+          if (typeof body?.theme !== "string" || !THEME_MAP.has(body.theme)) {
+            return Response.json({ error: "Invalid theme" }, { status: 400, headers: secHeaders });
+          }
+          config.theme = body.theme;
+          saveConfig(config, configPath);
           return Response.json({ theme: config.theme }, { headers: secHeaders });
         }
         return Response.json({ theme: config.theme }, { headers: secHeaders });

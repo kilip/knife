@@ -571,6 +571,37 @@ describe("Knife End-to-End System Tests", () => {
     expect(persisted.theme).toBe("nord");
   });
 
+  it("requires auth and whitelists theme IDs on POST /api/theme", async () => {
+    const sessionToken = createSessionToken("testowner", "test-secret-key-e2e");
+    const cookieHeader = `knife_session=${sessionToken}`;
+
+    // 1. Unauthenticated POST returns 401
+    const unauthRes = await fetch(`http://127.0.0.1:${testPort}/api/theme`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ theme: "nord" }),
+    });
+    expect(unauthRes.status).toBe(401);
+
+    // 2. Authenticated POST with unknown theme ID returns 400
+    const invalidRes = await fetch(`http://127.0.0.1:${testPort}/api/theme`, {
+      method: "POST",
+      headers: { Cookie: cookieHeader, "Content-Type": "application/json" },
+      body: JSON.stringify({ theme: "invalid-theme-id" }),
+    });
+    expect(invalidRes.status).toBe(400);
+
+    // 3. Authenticated POST with valid theme ID returns 200 and updates theme
+    const validRes = await fetch(`http://127.0.0.1:${testPort}/api/theme`, {
+      method: "POST",
+      headers: { Cookie: cookieHeader, "Content-Type": "application/json" },
+      body: JSON.stringify({ theme: "dracula" }),
+    });
+    expect(validRes.status).toBe(200);
+    const body = (await validRes.json()) as { theme: string };
+    expect(body.theme).toBe("dracula");
+  });
+
   it("allows deleting all tabs down to zero tabs without auto-creating a new tab", async () => {
     const sessionToken = createSessionToken("testowner", "test-secret-key-e2e");
     const cookieHeader = `knife_session=${sessionToken}`;
