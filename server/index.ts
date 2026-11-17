@@ -23,6 +23,7 @@ import {
   isProtectedPath,
   listDirectory,
   normalizePath,
+  resolveDownloadHeaders,
   statItem,
 } from "./fs";
 import { getClientIp } from "./proxy";
@@ -164,7 +165,7 @@ function getSecurityHeaders(cfg: KnifeConfig): Headers {
   const domain = cfg.publicDomain || `${cfg.host}:${cfg.port}`;
   const csp = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline'",
+    "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
     `connect-src 'self' ws://${domain} wss://${domain} ${cfg.host === "0.0.0.0" || cfg.host === "127.0.0.1" ? "ws: wss:" : ""}`.trim(),
     "img-src 'self' data: https://avatars.githubusercontent.com",
@@ -760,12 +761,17 @@ try {
           const inline =
             url.searchParams.get("inline") === "true" || url.searchParams.get("inline") === "1";
           const file = Bun.file(norm);
-          const headers = new Headers(secHeaders);
-          headers.set("Content-Type", file.type || "application/octet-stream");
-          headers.set(
-            "Content-Disposition",
-            inline ? "inline" : `attachment; filename="${basename(norm)}"`,
+          const downloadHeaders = resolveDownloadHeaders(
+            basename(norm),
+            file.type || "application/octet-stream",
+            inline,
           );
+          const headers = new Headers(secHeaders);
+          headers.set("Content-Type", downloadHeaders.contentType);
+          headers.set("Content-Disposition", downloadHeaders.contentDisposition);
+          if (downloadHeaders.csp) {
+            headers.set("Content-Security-Policy", downloadHeaders.csp);
+          }
           return new Response(file, { headers });
         }
 

@@ -252,3 +252,58 @@ export async function createZipStream(
     archiveName,
   };
 }
+
+const SAFE_INLINE_IMAGE_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "image/avif",
+  "image/bmp",
+  "image/x-icon",
+  "image/vnd.microsoft.icon",
+]);
+
+export interface DownloadHeaders {
+  contentType: string;
+  contentDisposition: string;
+  csp?: string;
+}
+
+/**
+ * Computes safe Content-Type, Content-Disposition, and optional sandbox CSP
+ * for /api/fs/download responses, preventing stored XSS via inline HTML/SVG.
+ */
+export function resolveDownloadHeaders(
+  fileName: string,
+  rawMimeType: string,
+  inline: boolean,
+): DownloadHeaders {
+  const baseMime = (rawMimeType || "application/octet-stream").split(";")[0]?.trim().toLowerCase();
+  const isSafeInlineImage =
+    inline &&
+    baseMime.startsWith("image/") &&
+    baseMime !== "image/svg+xml" &&
+    SAFE_INLINE_IMAGE_TYPES.has(baseMime);
+
+  if (isSafeInlineImage) {
+    return {
+      contentType: baseMime,
+      contentDisposition: "inline",
+      csp: "sandbox",
+    };
+  }
+
+  const safeFileName = fileName.replace(/["\r\n\\]/g, "_");
+  const isExecutableMarkup =
+    baseMime === "image/svg+xml" ||
+    baseMime === "text/html" ||
+    baseMime === "application/xhtml+xml";
+
+  return {
+    contentType: isExecutableMarkup
+      ? "text/plain; charset=utf-8"
+      : rawMimeType || "application/octet-stream",
+    contentDisposition: `attachment; filename="${safeFileName}"`,
+  };
+}

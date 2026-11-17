@@ -8,6 +8,7 @@ import {
   isProtectedPath,
   listDirectory,
   normalizePath,
+  resolveDownloadHeaders,
   statItem,
 } from "../server/fs";
 import { getTabCwd } from "../server/tmux";
@@ -112,5 +113,26 @@ describe("Filesystem API & Security Guardrails", () => {
   it("getTabCwd returns null for non-existent session", () => {
     const cwd = getTabCwd("knife-nonexistent-session-xyz");
     expect(cwd).toBeNull();
+  });
+
+  it("resolveDownloadHeaders forces attachment/text-plain for HTML and SVG even with inline=1", () => {
+    const htmlHeaders = resolveDownloadHeaders("xss.html", "text/html", true);
+    expect(htmlHeaders.contentDisposition).toBe('attachment; filename="xss.html"');
+    expect(htmlHeaders.contentType).toBe("text/plain; charset=utf-8");
+    expect(htmlHeaders.csp).toBeUndefined();
+
+    const svgHeaders = resolveDownloadHeaders("xss.svg", "image/svg+xml", true);
+    expect(svgHeaders.contentDisposition).toBe('attachment; filename="xss.svg"');
+    expect(svgHeaders.contentType).toBe("text/plain; charset=utf-8");
+    expect(svgHeaders.csp).toBeUndefined();
+
+    const pngInlineHeaders = resolveDownloadHeaders("photo.png", "image/png", true);
+    expect(pngInlineHeaders.contentDisposition).toBe("inline");
+    expect(pngInlineHeaders.contentType).toBe("image/png");
+    expect(pngInlineHeaders.csp).toBe("sandbox");
+
+    const pngDownloadHeaders = resolveDownloadHeaders("photo.png", "image/png", false);
+    expect(pngDownloadHeaders.contentDisposition).toBe('attachment; filename="photo.png"');
+    expect(pngDownloadHeaders.csp).toBeUndefined();
   });
 });

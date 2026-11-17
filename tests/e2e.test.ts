@@ -479,6 +479,49 @@ describe("Knife End-to-End System Tests", () => {
     const downloadedText = await downloadRes.text();
     expect(downloadedText).toBe("uploaded content 123");
 
+    // 7b. Stored XSS guard: ?inline=1 on .html and .svg must never serve executable HTML/SVG
+    const xssHtmlPath = join(testDir, "e2e_folder", "xss.html");
+    const xssSvgPath = join(testDir, "e2e_folder", "xss.svg");
+    const safePngPath = join(testDir, "e2e_folder", "pixel.png");
+    writeFileSync(xssHtmlPath, "<script>alert(1)</script>");
+    writeFileSync(xssSvgPath, "<svg onload=alert(1)></svg>");
+    writeFileSync(safePngPath, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+
+    const htmlInlineRes = await fetch(
+      `http://127.0.0.1:${testPort}/api/fs/download?path=${encodeURIComponent(xssHtmlPath)}&inline=1`,
+      { headers: { Cookie: cookieHeader } },
+    );
+    expect(htmlInlineRes.status).toBe(200);
+    expect(htmlInlineRes.headers.get("Content-Disposition")).toContain("attachment");
+    expect(htmlInlineRes.headers.get("Content-Type")).toBe("text/plain; charset=utf-8");
+    expect(htmlInlineRes.headers.get("X-Content-Type-Options")).toBe("nosniff");
+
+    const svgInlineRes = await fetch(
+      `http://127.0.0.1:${testPort}/api/fs/download?path=${encodeURIComponent(xssSvgPath)}&inline=1`,
+      { headers: { Cookie: cookieHeader } },
+    );
+    expect(svgInlineRes.status).toBe(200);
+    expect(svgInlineRes.headers.get("Content-Disposition")).toContain("attachment");
+    expect(svgInlineRes.headers.get("Content-Type")).toBe("text/plain; charset=utf-8");
+    expect(svgInlineRes.headers.get("X-Content-Type-Options")).toBe("nosniff");
+
+    const pngInlineRes = await fetch(
+      `http://127.0.0.1:${testPort}/api/fs/download?path=${encodeURIComponent(safePngPath)}&inline=1`,
+      { headers: { Cookie: cookieHeader } },
+    );
+    expect(pngInlineRes.status).toBe(200);
+    expect(pngInlineRes.headers.get("Content-Disposition")).toBe("inline");
+    expect(pngInlineRes.headers.get("Content-Security-Policy")).toBe("sandbox");
+
+    // 7c. CSP header must not contain 'unsafe-inline' in script-src
+    const cspHeader = downloadRes.headers.get("Content-Security-Policy") || "";
+    const scriptSrc = cspHeader
+      .split(";")
+      .map((d) => d.trim())
+      .find((d) => d.startsWith("script-src"));
+    expect(scriptSrc).toBeDefined();
+    expect(scriptSrc).not.toContain("'unsafe-inline'");
+
     // 8. Stream ZIP archive via POST /api/fs/archive
     const archiveRes = await fetch(`http://127.0.0.1:${testPort}/api/fs/archive`, {
       method: "POST",
