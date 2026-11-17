@@ -1,3 +1,4 @@
+import type { MeResponse } from "@shared/api";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -19,6 +20,7 @@ import { Link, useNavigate } from "react-router";
 import { SelfUpdateModal } from "~/components/SelfUpdateModal";
 import { useSelfUpdate } from "~/hooks/useSelfUpdate";
 import { FONT_PRESETS, useSettings } from "~/hooks/useSettings";
+import { api } from "~/lib/api";
 import { THEMES } from "~/utils/themes";
 
 type SettingsTab = "appearance" | "terminal" | "behavior" | "system";
@@ -73,15 +75,15 @@ export default function SettingsPage() {
 
   // Fetch user profile and system health
   useEffect(() => {
-    fetch("/api/me")
-      .then((res) => (res.ok ? res.json() : null))
+    api
+      .get<MeResponse>("/api/me")
       .then((data) => {
         if (data) setUserProfile(data);
       })
       .catch(() => {});
 
-    fetch("/api/health")
-      .then((res) => (res.ok ? res.json() : null))
+    api
+      .get<{ status: string }>("/api/health")
       .then((data) => {
         if (data) setSystemInfo(data);
       })

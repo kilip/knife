@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { api } from "~/lib/api";
 import { applyTheme, getStoredThemeId } from "~/utils/themes";
 
 export default function Login() {
@@ -7,8 +8,8 @@ export default function Login() {
   useEffect(() => {
     applyTheme(getStoredThemeId());
 
-    fetch("/api/config/public")
-      .then((res) => res.json())
+    api
+      .get<{ isFirstRun?: boolean; allowedUsername?: string }>("/api/config/public")
       .then((data) => {
         if (data.isFirstRun) {
           window.location.href = "/setup";

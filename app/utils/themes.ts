@@ -1,4 +1,5 @@
 import type { ITheme } from "@xterm/xterm";
+import { readStorage, STORAGE_KEYS, writeStorage } from "~/lib/use-persistent-state";
 
 export interface ThemeColors {
   bgBase: string;
@@ -276,19 +277,15 @@ export function applyTheme(themeId: string): KnifeTheme {
       metaTheme.setAttribute("content", theme.ui.bgBase);
     }
   }
-  try {
-    localStorage.setItem("knife_theme", theme.id);
-  } catch {}
+  writeStorage(STORAGE_KEYS.THEME, theme.id);
 
   return theme;
 }
 
 export function getStoredThemeId(): string {
-  try {
-    const saved = localStorage.getItem("knife_theme");
-    if (saved && THEME_MAP.has(saved)) {
-      return saved;
-    }
-  } catch {}
+  const saved = readStorage(STORAGE_KEYS.THEME);
+  if (saved && THEME_MAP.has(saved)) {
+    return saved;
+  }
   return DEFAULT_THEME_ID;
 }

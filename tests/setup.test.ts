@@ -29,7 +29,7 @@ describe("Setup UI Token Handling", () => {
     expect(src).toContain("extractSetupTokenFromHash(window.location.hash)");
     expect(src).toContain("window.history.replaceState(");
     expect(src).not.toContain('new URLSearchParams(window.location.search).get("token")');
-    expect(src).toContain('fetch("/api/setup"');
-    expect(src).toContain('method: "POST"');
+    expect(src).toContain("api.post");
+    expect(src).toContain('"/api/setup"');
   });
 });

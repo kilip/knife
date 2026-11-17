@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { api } from "~/lib/api";
+import { parseFontSize, readStorage, STORAGE_KEYS, writeStorage } from "~/lib/use-persistent-state";
 import { applyTheme } from "~/utils/themes";
 
 export interface UserSettings {
@@ -62,7 +64,7 @@ export function getStoredSettings(): UserSettings {
     return { ...DEFAULT_USER_SETTINGS };
   }
   try {
-    const raw = localStorage.getItem("knife_settings");
+    const raw = readStorage(STORAGE_KEYS.SETTINGS);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (typeof parsed === "object" && parsed !== null) {
@@ -72,26 +74,20 @@ export function getStoredSettings(): UserSettings {
   } catch {}
 
   // Backwards compatibility with standalone keys
-  const legacyTheme = localStorage.getItem("knife_theme");
-  const legacyFontSize = localStorage.getItem("knife_font_size");
-  const parsedFontSize = legacyFontSize ? parseInt(legacyFontSize, 10) : NaN;
+  const legacyTheme = readStorage(STORAGE_KEYS.THEME);
+  const parsedFontSize = parseFontSize(readStorage(STORAGE_KEYS.FONT_SIZE));
 
   return {
     ...DEFAULT_USER_SETTINGS,
     ...(legacyTheme ? { theme: legacyTheme } : {}),
-    ...(!Number.isNaN(parsedFontSize) && parsedFontSize >= 10 && parsedFontSize <= 32
-      ? { fontSize: parsedFontSize }
-      : {}),
+    ...(parsedFontSize !== undefined ? { fontSize: parsedFontSize } : {}),
   };
 }
 
 export function saveSettingsToLocal(settings: UserSettings): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem("knife_settings", JSON.stringify(settings));
-    localStorage.setItem("knife_theme", settings.theme);
-    localStorage.setItem("knife_font_size", String(settings.fontSize));
-  } catch {}
+  writeStorage(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+  writeStorage(STORAGE_KEYS.THEME, settings.theme);
+  writeStorage(STORAGE_KEYS.FONT_SIZE, String(settings.fontSize));
 }
 
 export function useSettings() {
@@ -109,20 +105,17 @@ export function useSettings() {
     let isCancelled = false;
     async function fetchServerSettings() {
       try {
-        const res = await fetch("/api/settings");
-        if (res.ok) {
-          const data = (await res.json()) as Partial<UserSettings>;
-          if (!isCancelled && typeof data === "object" && data !== null) {
-            setSettings((prev) => {
-              const merged = { ...prev, ...data };
-              saveSettingsToLocal(merged);
-              applyTheme(merged.theme);
-              return merged;
-            });
-          }
+        const data = await api.get<Partial<UserSettings>>("/api/settings");
+        if (!isCancelled && typeof data === "object" && data !== null) {
+          setSettings((prev) => {
+            const merged = { ...prev, ...data };
+            saveSettingsToLocal(merged);
+            applyTheme(merged.theme);
+            return merged;
+          });
         }
       } catch {
-        // Fall back gracefully to localStorage
+        // Fall back gracefully to stored settings
       } finally {
         if (!isCancelled) {
           setIsLoaded(true);
@@ -147,17 +140,10 @@ export function useSettings() {
 
       setIsSaving(true);
       try {
-        const res = await fetch("/api/settings", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(patch),
-        });
-        if (res.ok) {
-          const data = (await res.json()) as UserSettings;
-          setSettings(data);
-          saveSettingsToLocal(data);
-          return data;
-        }
+        const data = await api.patch<UserSettings>("/api/settings", patch);
+        setSettings(data);
+        saveSettingsToLocal(data);
+        return data;
       } catch (err) {
         console.error("Failed to sync settings with server:", err);
       } finally {

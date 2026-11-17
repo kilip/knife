@@ -1,5 +1,6 @@
 import type { UpdateInfo } from "@shared/api";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { api, apiRaw } from "~/lib/api";
 
 export type { UpdateInfo };
 
@@ -30,11 +31,9 @@ export function useSelfUpdate() {
     setStatus("checking");
     setError(null);
     try {
-      const res = await fetch(`/api/system/update/check${force ? "?force=true" : ""}`);
-      if (!res.ok) {
-        throw new Error(`Failed to check updates (HTTP ${res.status})`);
-      }
-      const data: UpdateInfo = await res.json();
+      const data = await api.get<UpdateInfo>(
+        `/api/system/update/check${force ? "?force=true" : ""}`,
+      );
       setUpdateInfo(data);
       if (data.command) {
         setRemediationCommand(data.command);
@@ -67,7 +66,7 @@ export function useSelfUpdate() {
 
     const attempt = async () => {
       try {
-        const res = await fetch("/api/health", { cache: "no-store" });
+        const res = await apiRaw("/api/health", { cache: "no-store" });
         if (res.ok) {
           const data = await res.json().catch(() => ({}));
           if (data.status === "ok") {
@@ -97,7 +96,7 @@ export function useSelfUpdate() {
     abortControllerRef.current = controller;
 
     try {
-      const res = await fetch("/api/system/update/apply", {
+      const res = await apiRaw("/api/system/update/apply", {
         method: "POST",
         signal: controller.signal,
       });

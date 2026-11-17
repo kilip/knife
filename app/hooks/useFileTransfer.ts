@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import type { FileTransferItem } from "~/components/FileBrowser/types";
+import { apiRaw } from "~/lib/api";
 
 export function useFileTransfer() {
   const [transfers, setTransfers] = useState<FileTransferItem[]>([]);
@@ -177,7 +178,7 @@ export function useFileTransfer() {
       });
 
       try {
-        const res = await fetch("/api/fs/archive", {
+        const res = await apiRaw("/api/fs/archive", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ paths }),

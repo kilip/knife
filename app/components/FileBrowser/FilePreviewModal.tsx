@@ -1,5 +1,6 @@
 import { AlertCircle, Check, Copy, Download, FileText, Loader2, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { apiRaw } from "~/lib/api";
 import type { FsItem } from "./types";
 
 interface FilePreviewModalProps {
@@ -30,7 +31,7 @@ export function FilePreviewModal({ isOpen, item, onClose, onDownload }: FilePrev
     setLoading(true);
     setError(null);
 
-    fetch(`/api/fs/download?path=${encodeURIComponent(item.path)}&inline=1`)
+    apiRaw(`/api/fs/download?path=${encodeURIComponent(item.path)}&inline=1`)
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.text();

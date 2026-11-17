@@ -1,5 +1,6 @@
 import { ArrowRight, Check, Copy, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
+import { api } from "~/lib/api";
 import { applyTheme, THEMES } from "~/utils/themes";
 
 /**
@@ -45,8 +46,8 @@ export default function Setup() {
     }
 
     // Check if setup already complete
-    fetch("/api/config/public")
-      .then((res) => res.json())
+    api
+      .get<{ isFirstRun?: boolean }>("/api/config/public")
       .then((data) => {
         if (!data.isFirstRun) {
           window.location.href = "/login";
@@ -81,25 +82,16 @@ export default function Setup() {
         .map((s) => s.trim())
         .filter(Boolean);
 
-      const res = await fetch("/api/setup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          token,
-          publicDomain,
-          publicScheme,
-          githubClientId,
-          githubClientSecret,
-          allowedUsername,
-          theme: themeId,
-          trustedProxies: proxiesArray,
-        }),
+      const data = await api.post<{ redirect?: string }>("/api/setup", {
+        token,
+        publicDomain,
+        publicScheme,
+        githubClientId,
+        githubClientSecret,
+        allowedUsername,
+        theme: themeId,
+        trustedProxies: proxiesArray,
       });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Setup failed. Please check inputs.");
-      }
 
       window.location.href = data.redirect || "/login";
     } catch (err: unknown) {

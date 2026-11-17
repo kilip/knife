@@ -1,6 +1,8 @@
 import type { ApiErrorResponse, FsListResponse, TabCwdResponse } from "@shared/api";
 import { AlertCircle, Folder, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { api } from "~/lib/api";
+import { parsePositiveInt, STORAGE_KEYS, usePersistentState } from "~/lib/use-persistent-state";
 import { ConflictDialog } from "./ConflictDialog";
 import { FileBrowserHeader } from "./FileBrowserHeader";
 import { FileContextMenu } from "./FileContextMenu";
@@ -43,12 +45,10 @@ export function FileBrowserPanel({
   // Sorting & Hidden settings
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
-  const [showHidden, setShowHidden] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("knife_file_browser_hidden") === "true";
-    }
-    return false;
-  });
+  const [showHidden, setShowHidden] = usePersistentState<boolean>(
+    STORAGE_KEYS.FILE_BROWSER_HIDDEN,
+    false,
+  );
 
   // Selection & Renaming state
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -77,16 +77,16 @@ export function FileBrowserPanel({
   } | null>(null);
 
   // Panel Width (Desktop resizable)
-  const [panelWidth, setPanelWidth] = useState<number>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("knife_file_browser_width");
-      if (saved) {
-        const val = parseInt(saved, 10);
-        if (!isNaN(val) && val >= 220 && val <= 600) return val;
-      }
-    }
-    return 300;
-  });
+  const [panelWidth, setPanelWidth] = usePersistentState<number>(
+    STORAGE_KEYS.FILE_BROWSER_WIDTH,
+    300,
+    {
+      parse: (raw) => {
+        const val = parsePositiveInt(raw);
+        return val !== undefined && val >= 220 && val <= 600 ? val : undefined;
+      },
+    },
+  );
   const isResizingRef = useRef(false);
 
   // Load Directory
@@ -96,17 +96,12 @@ export function FileBrowserPanel({
       setError(null);
       try {
         const url = `/api/fs/list?path=${encodeURIComponent(path || currentPath || "")}&hidden=${showHidden}`;
-        const res = await fetch(url);
-        if (!res.ok) {
-          const errJson = (await res.json().catch(() => ({}))) as Partial<ApiErrorResponse>;
-          throw new Error(errJson.error || `HTTP ${res.status}`);
-        }
-        const data = (await res.json()) as FsListResponse;
+        const data = await api.get<FsListResponse>(url);
         setCurrentPath(data.path);
         setParentPath(data.parent);
         setItems(data.items);
-      } catch (err: any) {
-        setError(err.message || "Failed to load directory");
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Failed to load directory");
       } finally {
         setLoading(false);
       }
@@ -127,12 +122,9 @@ export function FileBrowserPanel({
     if (!activeTabId) return;
     setIsSyncingCwd(true);
     try {
-      const res = await fetch(`/api/tabs/${activeTabId}/cwd`);
-      if (res.ok) {
-        const data = (await res.json()) as TabCwdResponse;
-        if (data.cwd) {
-          loadDirectory(data.cwd);
-        }
+      const data = await api.get<TabCwdResponse>(`/api/tabs/${activeTabId}/cwd`);
+      if (data.cwd) {
+        loadDirectory(data.cwd);
       }
     } catch {
       // Ignored
@@ -146,16 +138,12 @@ export function FileBrowserPanel({
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "h") {
         e.preventDefault();
-        setShowHidden((prev) => {
-          const next = !prev;
-          localStorage.setItem("knife_file_browser_hidden", String(next));
-          return next;
-        });
+        setShowHidden((prev) => !prev);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [setShowHidden]);
 
   // Panel resize drag handling
   const handleMouseDownResize = (e: React.MouseEvent) => {
@@ -176,10 +164,7 @@ export function FileBrowserPanel({
       document.body.style.userSelect = "";
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
-      setPanelWidth((w) => {
-        localStorage.setItem("knife_file_browser_width", String(w));
-        return w;
-      });
+      setPanelWidth((w) => w);
     };
 
     window.addEventListener("mousemove", handleMouseMove);
@@ -212,19 +197,14 @@ export function FileBrowserPanel({
     const name = window.prompt("Enter new file name:");
     if (!name || !name.trim()) return;
     try {
-      const res = await fetch("/api/fs/action", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "touch", parent: currentPath, name: name.trim() }),
+      await api.post("/api/fs/action", {
+        action: "touch",
+        parent: currentPath,
+        name: name.trim(),
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        alert(err.error || "Failed to create file");
-      } else {
-        loadDirectory(currentPath);
-      }
-    } catch (err: any) {
-      alert(err.message || "Failed to create file");
+      loadDirectory(currentPath);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to create file");
     }
   };
 
@@ -232,38 +212,28 @@ export function FileBrowserPanel({
     const name = window.prompt("Enter new folder name:");
     if (!name || !name.trim()) return;
     try {
-      const res = await fetch("/api/fs/action", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "mkdir", parent: currentPath, name: name.trim() }),
+      await api.post("/api/fs/action", {
+        action: "mkdir",
+        parent: currentPath,
+        name: name.trim(),
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        alert(err.error || "Failed to create folder");
-      } else {
-        loadDirectory(currentPath);
-      }
-    } catch (err: any) {
-      alert(err.message || "Failed to create folder");
+      loadDirectory(currentPath);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to create folder");
     }
   };
 
   const handleRenameSubmit = async (newName: string) => {
     if (!renamingPath) return;
     try {
-      const res = await fetch("/api/fs/action", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "rename", path: renamingPath, name: newName }),
+      await api.post("/api/fs/action", {
+        action: "rename",
+        path: renamingPath,
+        name: newName,
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        alert(err.error || "Failed to rename");
-      } else {
-        loadDirectory(currentPath);
-      }
-    } catch (err: any) {
-      alert(err.message || "Failed to rename");
+      loadDirectory(currentPath);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to rename");
     } finally {
       setRenamingPath(null);
     }
@@ -272,19 +242,13 @@ export function FileBrowserPanel({
   const handleDeleteConfirm = async () => {
     if (!itemToDelete) return;
     try {
-      const res = await fetch("/api/fs/action", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "delete", paths: [itemToDelete.path] }),
+      await api.post("/api/fs/action", {
+        action: "delete",
+        paths: [itemToDelete.path],
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        alert(err.error || "Failed to delete");
-      } else {
-        loadDirectory(currentPath);
-      }
-    } catch (err: any) {
-      alert(err.message || "Failed to delete");
+      loadDirectory(currentPath);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to delete");
     } finally {
       setItemToDelete(null);
     }
@@ -386,13 +350,7 @@ export function FileBrowserPanel({
             const relPaths = Array.from(files).map((f) => f.webkitRelativePath || f.name);
             handleQueueUpload(files, relPaths);
           }}
-          onToggleHidden={() => {
-            setShowHidden((prev) => {
-              const next = !prev;
-              localStorage.setItem("knife_file_browser_hidden", String(next));
-              return next;
-            });
-          }}
+          onToggleHidden={() => setShowHidden((prev) => !prev)}
         />
 
         {/* Content list or loading / error states */}

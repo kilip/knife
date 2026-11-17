@@ -16,6 +16,8 @@ import { useFileTransfer } from "~/hooks/useFileTransfer";
 import { usePwa } from "~/hooks/usePwa";
 import { useSelfUpdate } from "~/hooks/useSelfUpdate";
 import { useSettings } from "~/hooks/useSettings";
+import { ApiError, api } from "~/lib/api";
+import { STORAGE_KEYS, usePersistentState } from "~/lib/use-persistent-state";
 import { getTopLevelDir } from "~/utils/cwd";
 import { getTheme, type KnifeTheme } from "~/utils/themes";
 
@@ -33,36 +35,25 @@ export default function Home() {
   const closingTabsRef = useRef<Set<string>>(new Set());
   const fontSize = settings.fontSize;
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isFileBrowserOpen, setIsFileBrowserOpen] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("knife_file_browser_open") === "true";
-    }
-    return false;
-  });
+  const [isFileBrowserOpen, setIsFileBrowserOpen] = usePersistentState<boolean>(
+    STORAGE_KEYS.FILE_BROWSER_OPEN,
+    false,
+  );
 
   const handleToggleFileBrowser = useCallback(() => {
-    setIsFileBrowserOpen((prev) => {
-      const next = !prev;
-      localStorage.setItem("knife_file_browser_open", String(next));
-      return next;
-    });
-  }, []);
-  const [isQuickKeysBarOpen, setIsQuickKeysBarOpen] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("knife_quick_keys_open");
-      if (stored !== null) return stored === "true";
-      return window.matchMedia("(max-width: 768px), (pointer: coarse)").matches;
-    }
-    return false;
-  });
+    setIsFileBrowserOpen((prev) => !prev);
+  }, [setIsFileBrowserOpen]);
+
+  const [isQuickKeysBarOpen, setIsQuickKeysBarOpen] = usePersistentState<boolean>(
+    STORAGE_KEYS.QUICK_KEYS_OPEN,
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 768px), (pointer: coarse)").matches,
+  );
 
   const handleToggleQuickKeys = useCallback(() => {
-    setIsQuickKeysBarOpen((prev) => {
-      const next = !prev;
-      localStorage.setItem("knife_quick_keys_open", String(next));
-      return next;
-    });
-  }, []);
+    setIsQuickKeysBarOpen((prev) => !prev);
+  }, [setIsQuickKeysBarOpen]);
 
   const terminalActionsRef = useRef<Map<string, TerminalActions>>(new Map());
 
@@ -169,13 +160,8 @@ export default function Home() {
     async (files: File[]) => {
       if (!activeTabId) return;
       try {
-        const res = await fetch(`/api/tabs/${activeTabId}/cwd`);
-        if (res.ok) {
-          const data = (await res.json()) as TabCwdResponse;
-          uploadFiles(data.cwd || "", files);
-        } else {
-          uploadFiles("", files);
-        }
+        const data = await api.get<TabCwdResponse>(`/api/tabs/${activeTabId}/cwd`);
+        uploadFiles(data.cwd || "", files);
       } catch {
         uploadFiles("", files);
       }
@@ -222,15 +208,9 @@ export default function Home() {
   // Fetch initial tabs and user profile
   useEffect(() => {
     // Fetch user
-    fetch("/api/me")
-      .then((res) => {
-        if (res.status === 401) {
-          window.location.href = "/login";
-          return null;
-        }
-        return res.json();
-      })
-      .then((data: MeResponse | null) => {
+    api
+      .get<MeResponse>("/api/me")
+      .then((data) => {
         if (data?.authenticated && data.username) {
           setUsername(data.username);
           if (data.shellName) {
@@ -238,25 +218,23 @@ export default function Home() {
           }
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        if (err instanceof ApiError && err.status === 401) {
+          window.location.href = "/login";
+        }
+      });
 
     // Fetch tabs
-    fetch("/api/tabs")
-      .then((res) => {
-        if (res.status === 401) {
-          window.location.href = "/login";
-          return [];
-        }
-        return res.json();
-      })
+    api
+      .get<TabData[]>("/api/tabs")
       .then((data) => {
         if (Array.isArray(data)) {
           setTabs(data);
           if (data.length > 0) {
             setActiveTabId(data[0].id);
             for (const tab of data) {
-              fetch(`/api/tabs/${tab.id}/cwd`)
-                .then((r) => r.json())
+              api
+                .get<TabCwdResponse>(`/api/tabs/${tab.id}/cwd`)
                 .then((d) => {
                   if (d?.cwd) {
                     const top = getTopLevelDir(d.cwd);
@@ -274,7 +252,11 @@ export default function Home() {
           }
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        if (err instanceof ApiError && err.status === 401) {
+          window.location.href = "/login";
+        }
+      });
   }, []);
 
   // Sync active tab title with CWD top-level folder
@@ -283,9 +265,7 @@ export default function Home() {
 
     const syncCwd = async () => {
       try {
-        const res = await fetch(`/api/tabs/${activeTabId}/cwd`);
-        if (!res.ok) return;
-        const data = (await res.json()) as TabCwdResponse;
+        const data = await api.get<TabCwdResponse>(`/api/tabs/${activeTabId}/cwd`);
         if (!data?.cwd) return;
 
         const topLevel = getTopLevelDir(data.cwd);
@@ -308,13 +288,9 @@ export default function Home() {
   // Create new tab
   const handleCreateTab = useCallback(() => {
     const nextIndex = tabs.length + 1;
-    fetch("/api/tabs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: `${shellName} ${nextIndex}` }),
-    })
-      .then((res) => res.json())
-      .then((newTab: TabData) => {
+    api
+      .post<TabData>("/api/tabs", { name: `${shellName} ${nextIndex}` })
+      .then((newTab) => {
         if (newTab && newTab.id) {
           customTabsRef.current.delete(newTab.id);
           setTabs((prev) => [...prev, newTab]);
@@ -358,10 +334,8 @@ export default function Home() {
         }
       }
 
-      fetch(`/api/tabs/${closedId}`, {
-        method: "DELETE",
-      })
-        .then((res) => res.json())
+      api
+        .delete<{ remainingTabs?: TabData[] }>(`/api/tabs/${closedId}`)
         .then((data) => {
           if (Array.isArray(data.remainingTabs)) {
             setTabs(data.remainingTabs);
@@ -404,13 +378,9 @@ export default function Home() {
   // Rename tab
   const handleRenameTab = (id: string, newName: string) => {
     customTabsRef.current.add(id);
-    fetch(`/api/tabs/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newName }),
-    })
-      .then((res) => res.json())
-      .then((updated: TabData) => {
+    api
+      .patch<TabData>(`/api/tabs/${id}`, { name: newName })
+      .then((updated) => {
         setTabs((prev) =>
           prev.map((t) => (t.id === id ? { ...t, name: updated.name || newName } : t)),
         );
@@ -421,11 +391,9 @@ export default function Home() {
   // Reorder tabs
   const handleReorderTabs = (newTabs: TabData[]) => {
     setTabs(newTabs);
-    fetch("/api/tabs/reorder", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tabIds: newTabs.map((t) => t.id) }),
-    }).catch((err) => console.error("Failed to reorder tabs:", err));
+    api
+      .post("/api/tabs/reorder", { tabIds: newTabs.map((t) => t.id) })
+      .catch((err) => console.error("Failed to reorder tabs:", err));
   };
 
   // Logout
@@ -590,10 +558,7 @@ export default function Home() {
       <div className="flex-1 flex min-h-0 relative overflow-hidden">
         <FileBrowserPanel
           isOpen={isFileBrowserOpen}
-          onClose={() => {
-            setIsFileBrowserOpen(false);
-            localStorage.setItem("knife_file_browser_open", "false");
-          }}
+          onClose={() => setIsFileBrowserOpen(false)}
           activeTabId={activeTabId}
           onInsertTerminalPath={handleInsertTerminalPath}
           onUpload={uploadFiles}
@@ -650,10 +615,7 @@ export default function Home() {
               onCtrlV={handleCtrlV}
               onArrowUp={handleArrowUp}
               onArrowDown={handleArrowDown}
-              onClose={() => {
-                setIsQuickKeysBarOpen(false);
-                localStorage.setItem("knife_quick_keys_open", "false");
-              }}
+              onClose={() => setIsQuickKeysBarOpen(false)}
             />
           )}
         </div>
