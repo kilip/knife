@@ -25,6 +25,7 @@ import {
   getPublicOrigin,
 } from "./auth";
 import { getClientIp } from "./proxy";
+import { shouldLogRequest, formatRequestLog } from "./request-log";
 import { websocketHandler, isAllowedOrigin, getActivePty, closeActivePty } from "./ws";
 import {
   normalizePath,
@@ -208,7 +209,9 @@ try {
       const url = new URL(req.url);
       const directIp = server.requestIP(req)?.address || "127.0.0.1";
       const clientIp = getClientIp(directIp, req.headers, config.trustedProxies);
-      console.log(`[http] ${req.method} ${url.pathname}${url.search} (from: ${clientIp})`);
+      if (shouldLogRequest(url.pathname)) {
+        console.log(formatRequestLog(req.method, url.pathname, clientIp));
+      }
 
       // 1. WebSocket Upgrade Handler
       if (url.pathname === "/ws/terminal" || url.pathname.startsWith("/ws/terminal/")) {
@@ -334,9 +337,7 @@ try {
           }
 
           if (!body.token || !verifySetupToken(body.token)) {
-            console.warn(
-              `[setup] Token verification failed! Received: ${body.token}, Expected: ${getActiveSetupToken()}`,
-            );
+            console.warn(`[setup] Token verification failed from ${clientIp}`);
             return Response.json(
               { error: "Invalid or expired setup token." },
               { status: 403, headers: secHeaders },

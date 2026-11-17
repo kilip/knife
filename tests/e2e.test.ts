@@ -10,6 +10,8 @@ describe("Knife End-to-End System Tests", () => {
   const configPath = join(testDir, "config.json");
   let serverProcess: ReturnType<typeof Bun.spawn> | null = null;
   let setupToken: string = "";
+  let capturedStdout = "";
+  let capturedStderr = "";
 
   beforeAll(async () => {
     mkdirSync(testDir, { recursive: true });
@@ -32,16 +34,28 @@ describe("Knife End-to-End System Tests", () => {
       },
     );
 
+    const stderrStream = serverProcess.stderr as ReadableStream<Uint8Array>;
+    const stderrReader = stderrStream.getReader();
+    const stderrDecoder = new TextDecoder();
+    void (async () => {
+      try {
+        while (true) {
+          const { value, done } = await stderrReader.read();
+          if (done) break;
+          capturedStderr += stderrDecoder.decode(value, { stream: true });
+        }
+      } catch {}
+    })();
+
     const stream = serverProcess.stdout as ReadableStream<Uint8Array>;
     const reader = stream.getReader();
     const decoder = new TextDecoder();
-    let accumulated = "";
 
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
-      accumulated += decoder.decode(value);
-      const match = accumulated.match(
+      capturedStdout += decoder.decode(value, { stream: true });
+      const match = capturedStdout.match(
         /One-time Setup Token:\s*(?:\x1b\[[0-9;]*m)*([a-f0-9]{32,64})/i,
       );
       if (match) {
@@ -49,6 +63,17 @@ describe("Knife End-to-End System Tests", () => {
         break;
       }
     }
+
+    // Continue draining stdout in the background for log assertions
+    void (async () => {
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          capturedStdout += decoder.decode(value, { stream: true });
+        }
+      } catch {}
+    })();
   });
 
   afterAll(() => {
@@ -67,6 +92,22 @@ describe("Knife End-to-End System Tests", () => {
   it("boots in first-run mode and prints setup token", () => {
     expect(setupToken).toBeDefined();
     expect(setupToken.length).toBeGreaterThanOrEqual(32);
+  });
+
+  it("never logs query string tokens such as /setup?token=SECRET", async () => {
+    const res = await fetch(`http://127.0.0.1:${testPort}/setup?token=SECRET`);
+    expect(res.status).toBe(200);
+
+    // Trigger another logged route so stdout has flushed past /setup
+    await fetch(`http://127.0.0.1:${testPort}/api/config/public`);
+    const deadline = Date.now() + 2000;
+    while (!capturedStdout.includes("[http] GET /api/config/public") && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 20));
+    }
+
+    expect(capturedStdout).toContain("[http] GET /setup");
+    expect(capturedStdout).not.toContain("SECRET");
+    expect(capturedStderr).not.toContain("SECRET");
   });
 
   it("serves health check and public config", async () => {
