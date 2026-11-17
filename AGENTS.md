@@ -25,8 +25,9 @@ CI runs `bun install --frozen-lockfile` -> `check` -> `typecheck` -> `build` -> 
 ## Architecture notes
 
 - **Single process** serves the SPA, `/api/*`, `/auth/*` and the `/ws/terminal` WebSocket. Routing is hand-written `url.pathname` matching in `server/index.ts` (no Express/Hono).
-- **Sessions:** each tab is a `TabData` persisted in `<dataDir>/tabs.json`; `server/ws.ts` keeps live `PtySession`s keyed by `tabId`. On disconnect a 60s grace timer runs before the PTY is killed; reconnecting replays the rolling buffer.
-- **Direct PTY:** sessions spawn `$SHELL -l` directly via `Bun.Terminal` (`server/pty.ts`). If you change session behavior, update `README.md`.
+- **Server layout:** `server/cli.ts` (help & startup banners), `server/middleware/` (`security-headers.ts`, `request-log.ts`), `server/features/static/serve.ts` (SPA/asset serving), `server/features/terminal/` (`ws.ts`, `pty.ts`, `shell.ts`), `server/service/` (daemon management).
+- **Sessions:** each tab is a `TabData` persisted in `<dataDir>/tabs.json`; `server/features/terminal/ws.ts` keeps live `PtySession`s keyed by `tabId`. On disconnect a 60s grace timer runs before the PTY is killed; reconnecting replays the rolling buffer.
+- **Direct PTY:** sessions spawn `$SHELL -l` directly via `Bun.Terminal` (`server/features/terminal/pty.ts`). If you change session behavior, update `README.md`.
 - **Auth:** single user. First run uses a one-time console setup token; afterwards GitHub OAuth limited to `allowedUsername`. Sessions are HMAC-signed cookies. Use `timingSafeEqual` for secret comparison.
 - **Config & data:** `config.json` and `data/` are gitignored; never commit them.
 - **Themes:** colors live only in `app/utils/themes.ts`, not in component CSS.

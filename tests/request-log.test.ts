@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { formatRequestLog, shouldLogRequest } from "../server/request-log";
+import { formatRequestLog, shouldLogRequest } from "../server/middleware/request-log";
 
 describe("request-log", () => {
   describe("shouldLogRequest", () => {

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { appendRollingBuffer, decodePtyChunk, MAX_PTY_BUFFER_SIZE } from "../server/pty";
+import {
+  appendRollingBuffer,
+  decodePtyChunk,
+  MAX_PTY_BUFFER_SIZE,
+} from "../server/features/terminal/pty";
 
 function hasLoneSurrogate(str: string): boolean {
   for (let i = 0; i < str.length; i++) {

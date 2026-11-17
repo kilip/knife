@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { existsSync } from "node:fs";
-import { PtySession } from "../server/pty";
-import { getShellName, getUserShell } from "../server/shell";
+import { PtySession } from "../server/features/terminal/pty";
+import { getShellName, getUserShell } from "../server/features/terminal/shell";
 
 describe("User Shell Detection and Direct PTY", () => {
   it("resolves a valid, executable user shell", () => {

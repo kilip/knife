@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
+import { isAllowedOrigin, isAllowedRequestOrigin } from "../server/features/terminal/ws";
 import { getClientIp, isIpTrusted, isValidIpv4, isValidIpv6 } from "../server/proxy";
-import { isAllowedOrigin, isAllowedRequestOrigin } from "../server/ws";
 
 describe("Proxy & IP Verification", () => {
   it("validates IPv4 addresses accurately", () => {

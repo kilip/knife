@@ -16,7 +16,21 @@ import {
   revokeSession,
   verifySetupToken,
 } from "./auth";
-import { type KnifeConfig, loadConfig, parseCliArgs, saveConfig } from "./config";
+import {
+  printCliHelp,
+  printFirstRunBanner,
+  printRunningServiceSetupBanner,
+  printStartupBanner,
+} from "./cli";
+import { loadConfig, parseCliArgs, saveConfig } from "./config";
+import { serveStaticFile } from "./features/static/serve";
+import { getShellName, getUserShell } from "./features/terminal/shell";
+import {
+  closeActivePty,
+  getActivePty,
+  isAllowedRequestOrigin,
+  websocketHandler,
+} from "./features/terminal/ws";
 import {
   createZipStream,
   getDefaultHome,
@@ -26,11 +40,11 @@ import {
   resolveDownloadHeaders,
   statItem,
 } from "./fs";
+import { formatRequestLog, shouldLogRequest } from "./middleware/request-log";
+import { getSecurityHeaders } from "./middleware/security-headers";
 import { getClientIp } from "./proxy";
-import { formatRequestLog, shouldLogRequest } from "./request-log";
 import { handleServiceCommand } from "./service";
 import { getServiceManager } from "./service/factory";
-import { getShellName, getUserShell } from "./shell";
 import {
   getTabsPath,
   loadSettings,
@@ -47,7 +61,6 @@ import {
   isManagedService,
   triggerRestart,
 } from "./update";
-import { closeActivePty, getActivePty, isAllowedRequestOrigin, websocketHandler } from "./ws";
 
 function requireJsonContentType(req: Request, headers: HeadersInit): Response | null {
   const contentType = req.headers.get("content-type");
@@ -76,20 +89,7 @@ try {
 // Parse CLI arguments and load configuration
 const cliArgs = parseCliArgs(process.argv.slice(2));
 if (cliArgs.help) {
-  console.log(`
-Usage: knife [command] [options]
-
-Commands:
-  onboarding            Start or attach to first-run setup and print the setup URL
-  service <action>      Manage background service (install, uninstall, start, stop, status, restart)
-
-Options:
-  --host <ip>           Listen host address (default: 127.0.0.1 or KNIFE_HOST)
-  -p, --port <port>     Listen port number (default: 3000 or KNIFE_PORT)
-  -d, --domain <domain> Public domain (default: KNIFE_PUBLIC_DOMAIN or config.json)
-  --config <path>       Path to config.json (default: ./config.json or KNIFE_CONFIG_PATH)
-  -h, --help            Show help message
-`);
+  printCliHelp();
   process.exit(0);
 }
 
@@ -123,15 +123,7 @@ if (cliArgs.onboarding) {
         status.setupUrl &&
         (!cliArgs.port || status.setupUrl.includes(`:${cliArgs.port}/`))
       ) {
-        const tokenMatch = status.setupUrl.match(/[?&]token=([a-zA-Z0-9_-]+)/);
-        console.log(`\n${"=".repeat(64)}`);
-        console.log("  KNIFE - First Run Setup (Running Service)");
-        console.log("=".repeat(64));
-        console.log(`\n  \x1b[36m\x1b[1m${status.setupUrl}\x1b[0m\n`);
-        if (tokenMatch) {
-          console.log(`One-time Setup Token: \x1b[33m${tokenMatch[1]}\x1b[0m`);
-        }
-        console.log(`${"=".repeat(64)}\n`);
+        printRunningServiceSetupBanner(status.setupUrl);
         process.exit(0);
       }
     } catch {
@@ -157,73 +149,6 @@ try {
   }
 } catch (err) {
   console.error("[server] Failed to initialize tabs:", err);
-}
-
-function getSecurityHeaders(cfg: KnifeConfig): Headers {
-  const headers = new Headers();
-  const domain = cfg.publicDomain || `${cfg.host}:${cfg.port}`;
-  const csp = [
-    "default-src 'self'",
-    "script-src 'self'",
-    "style-src 'self' 'unsafe-inline'",
-    `connect-src 'self' ws://${domain} wss://${domain}`,
-    "img-src 'self' data: https://avatars.githubusercontent.com",
-    "font-src 'self' data:",
-    "frame-ancestors 'none'",
-  ].join("; ");
-
-  headers.set("Content-Security-Policy", csp);
-  headers.set("X-Content-Type-Options", "nosniff");
-  headers.set("X-Frame-Options", "DENY");
-  headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  return headers;
-}
-
-const clientBuildDir = existsSync(join(process.cwd(), "build", "client"))
-  ? join(process.cwd(), "build", "client")
-  : join(import.meta.dir, "..", "build", "client");
-
-function serveStaticFile(
-  path: string,
-  contentType?: string,
-  secHeaders?: Headers,
-): Response | null {
-  const relPath = path.replace(/^\//, "");
-  if (!relPath) {
-    return null;
-  }
-  const fullPath = join(clientBuildDir, relPath);
-  if (existsSync(fullPath)) {
-    try {
-      if (!statSync(fullPath).isFile()) {
-        return null;
-      }
-    } catch {
-      return null;
-    }
-    const file = Bun.file(fullPath);
-    const headers = new Headers(secHeaders);
-    if (contentType) {
-      headers.set("Content-Type", contentType);
-    }
-    // Specific header handling for Service Worker & PWA Manifest
-    if (path === "/sw.js") {
-      headers.set("Content-Type", "application/javascript; charset=utf-8");
-      headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
-      headers.set("Service-Worker-Allowed", "/");
-    } else if (path === "/manifest.webmanifest") {
-      headers.set("Content-Type", "application/manifest+json; charset=utf-8");
-      headers.set("Cache-Control", "no-cache");
-    } else if (path.includes("/assets/")) {
-      headers.set("Cache-Control", "public, max-age=31536000, immutable");
-    } else if (path.startsWith("/icons/")) {
-      headers.set("Cache-Control", "public, max-age=86400");
-    } else {
-      headers.set("Cache-Control", "no-cache");
-    }
-    return new Response(file, { headers });
-  }
-  return null;
 }
 
 // Global server instance
@@ -1199,32 +1124,10 @@ try {
   // Print startup / setup banner only after the server is bound and listening
   if (isFirstRun) {
     const token = generateSetupToken();
-    const displayHost = config.host === "0.0.0.0" ? "127.0.0.1" : config.host;
-    const setupUrl = `http://${displayHost}:${config.port}/setup?token=${token}`;
-
-    console.log(`\n${"=".repeat(64)}`);
-    console.log("  KNIFE - First Run Setup");
-    console.log("=".repeat(64));
-    console.log("\nNo existing configuration found. Knife is running in setup mode.");
-    if (config.publicDomain) {
-      const publicSetupUrl = `${config.publicScheme}://${config.publicDomain}/setup?token=${token}`;
-      console.log(`  Public: \x1b[36m\x1b[1m${publicSetupUrl}\x1b[0m`);
-      console.log(`  Local:  \x1b[36m\x1b[1m${setupUrl}\x1b[0m\n`);
-    } else {
-      console.log(`  \x1b[36m\x1b[1m${setupUrl}\x1b[0m\n`);
-    }
-    console.log(`One-time Setup Token: \x1b[33m${token}\x1b[0m`);
-    console.log(`${"=".repeat(64)}\n`);
+    printFirstRunBanner(config, token);
   } else {
     const origin = getPublicOrigin(config);
-    console.log(`\n${"=".repeat(64)}`);
-    console.log("  KNIFE - Web Terminal");
-    console.log("=".repeat(64));
-    console.log(`Listening on:       http://${config.host}:${config.port}`);
-    console.log(`Configured Public:  ${origin}`);
-    console.log(`Allowed User:       ${config.auth?.allowedUsername}`);
-    console.log(`GitHub Callback:    ${origin}/auth/github/callback`);
-    console.log(`${"=".repeat(64)}\n`);
+    printStartupBanner(config, origin);
   }
 } catch (err: unknown) {
   const errorObj = err as { code?: string; message?: string };
