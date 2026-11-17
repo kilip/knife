@@ -64,5 +64,8 @@
     "tailwindcss": "^4.3.5",
     "typescript": "^7.0.2",
     "vite": "^8.3.7"
+  },
+  "dependencies": {
+    "hono": "^4.13.19"
   }
 }

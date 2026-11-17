@@ -1,21 +1,7 @@
 import { existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { THEME_MAP } from "../app/utils/themes";
-import {
-  authorizeGitHubUser,
-  consumeSetupToken,
-  createSessionCookieHeader,
-  createSessionToken,
-  exchangeGitHubCode,
-  fetchGitHubUser,
-  generateSetupToken,
-  getActiveSetupToken,
-  getGitHubOAuthUrl,
-  getPublicOrigin,
-  getSessionFromCookie,
-  revokeSession,
-  verifySetupToken,
-} from "./auth";
+import { createApp } from "./app";
+import { generateSetupToken, getPublicOrigin, getSessionFromCookie } from "./auth";
 import {
   printCliHelp,
   printFirstRunBanner,
@@ -23,8 +9,7 @@ import {
   printStartupBanner,
 } from "./cli";
 import { loadConfig, parseCliArgs, saveConfig } from "./config";
-import { serveStaticFile } from "./features/static/serve";
-import { getShellName, getUserShell } from "./features/terminal/shell";
+import { getShellName } from "./features/terminal/shell";
 import {
   closeActivePty,
   getActivePty,
@@ -41,7 +26,6 @@ import {
   statItem,
 } from "./fs";
 import { formatRequestLog, shouldLogRequest } from "./middleware/request-log";
-import { getSecurityHeaders } from "./middleware/security-headers";
 import { getClientIp } from "./proxy";
 import { handleServiceCommand } from "./service";
 import { getServiceManager } from "./service/factory";
@@ -151,6 +135,593 @@ try {
   console.error("[server] Failed to initialize tabs:", err);
 }
 
+const app = createApp({
+  getConfig: () => config,
+  getIsFirstRun: () => isFirstRun,
+  setIsFirstRun: (value) => {
+    isFirstRun = value;
+  },
+  saveConfig: (cfg) => saveConfig(cfg, configPath),
+  async legacyHandler(req, _clientIp, secHeaders) {
+    const url = new URL(req.url);
+    const currentSession = getSessionFromCookie(req.headers.get("cookie"), config.sessionSecret);
+
+    // 7. Tabs Management API
+    if (url.pathname === "/api/tabs" || url.pathname.startsWith("/api/tabs/")) {
+      if (!currentSession) {
+        return Response.json({ error: "Unauthorized" }, { status: 401, headers: secHeaders });
+      }
+
+      // GET /api/tabs
+      if (url.pathname === "/api/tabs" && req.method === "GET") {
+        return Response.json(currentTabs, { headers: secHeaders });
+      }
+
+      // POST /api/tabs (Create tab)
+      if (url.pathname === "/api/tabs" && req.method === "POST") {
+        const contentTypeErr = requireJsonContentType(req, secHeaders);
+        if (contentTypeErr) return contentTypeErr;
+        const body = (await req.json().catch(() => ({}))) as {
+          name?: string;
+          cols?: number;
+          rows?: number;
+        };
+        const id = crypto.randomUUID().slice(0, 8);
+        const shellName = getShellName();
+        const tabName = body.name?.trim() || `${shellName} ${currentTabs.length + 1}`;
+
+        const newTab: TabData = {
+          id,
+          name: tabName,
+          order: currentTabs.length,
+          createdAt: Date.now(),
+        };
+
+        const nextTabs = [...currentTabs, newTab];
+        try {
+          saveTabs(nextTabs);
+        } catch (err) {
+          console.error("[server] Failed to save tabs on create:", err);
+          return Response.json(
+            { error: "Failed to persist tabs" },
+            { status: 500, headers: secHeaders },
+          );
+        }
+        currentTabs = nextTabs;
+
+        return Response.json(newTab, { status: 201, headers: secHeaders });
+      }
+
+      // POST /api/tabs/reorder
+      if (url.pathname === "/api/tabs/reorder" && req.method === "POST") {
+        const contentTypeErr = requireJsonContentType(req, secHeaders);
+        if (contentTypeErr) return contentTypeErr;
+        const body = (await req.json().catch(() => ({}))) as { tabIds?: string[] };
+        if (Array.isArray(body.tabIds)) {
+          const idMap = new Map(currentTabs.map((t) => [t.id, t]));
+          const reordered: TabData[] = [];
+          body.tabIds.forEach((id, index) => {
+            const tab = idMap.get(id);
+            if (tab) {
+              reordered.push({ ...tab, order: index });
+              idMap.delete(id);
+            }
+          });
+          // Append any tabs not included in list
+          idMap.forEach((tab) => {
+            reordered.push({ ...tab, order: reordered.length });
+          });
+          try {
+            saveTabs(reordered);
+          } catch (err) {
+            console.error("[server] Failed to save tabs on reorder:", err);
+            return Response.json(
+              { error: "Failed to persist tab order" },
+              { status: 500, headers: secHeaders },
+            );
+          }
+          currentTabs = reordered;
+        }
+        return Response.json(currentTabs, { headers: secHeaders });
+      }
+
+      // Specific Tab Operations: PATCH /api/tabs/:id, DELETE /api/tabs/:id
+      // Tab CWD Endpoint: GET /api/tabs/:id/cwd
+      const cwdMatch = url.pathname.match(/^\/api\/tabs\/([^/]+)\/cwd$/);
+      if (cwdMatch && req.method === "GET") {
+        const targetTabId = cwdMatch[1];
+        const tab = currentTabs.find((t) => t.id === targetTabId);
+        if (!tab) {
+          return Response.json({ error: "Tab not found" }, { status: 404, headers: secHeaders });
+        }
+        const activePty = getActivePty(tab.id);
+        const cwd = activePty?.getCwd() || getDefaultHome();
+        return Response.json({ id: tab.id, cwd }, { headers: secHeaders });
+      }
+
+      const tabId = url.pathname.slice("/api/tabs/".length);
+      const tabIndex = currentTabs.findIndex((t) => t.id === tabId);
+
+      if (tabIndex === -1) {
+        return Response.json({ error: "Tab not found" }, { status: 404, headers: secHeaders });
+      }
+
+      // Rename tab
+      if (req.method === "PATCH") {
+        const contentTypeErr = requireJsonContentType(req, secHeaders);
+        if (contentTypeErr) return contentTypeErr;
+        const body = (await req.json().catch(() => ({}))) as { name?: string };
+        if (body.name && typeof body.name === "string") {
+          const nextTabs = currentTabs.map((t, i) =>
+            i === tabIndex ? { ...t, name: body.name!.trim() } : t,
+          );
+          try {
+            saveTabs(nextTabs);
+          } catch (err) {
+            console.error("[server] Failed to save tabs on rename:", err);
+            return Response.json(
+              { error: "Failed to persist tab rename" },
+              { status: 500, headers: secHeaders },
+            );
+          }
+          currentTabs = nextTabs;
+        }
+        return Response.json(currentTabs[tabIndex], { headers: secHeaders });
+      }
+
+      // Delete / Close tab
+      if (req.method === "DELETE") {
+        const deletedTab = currentTabs[tabIndex];
+        const nextTabs = currentTabs
+          .filter((_, i) => i !== tabIndex)
+          .map((t, i) => ({ ...t, order: i }));
+        try {
+          saveTabs(nextTabs);
+        } catch (err) {
+          console.error("[server] Failed to save tabs on delete:", err);
+          return Response.json(
+            { error: "Failed to persist tab deletion" },
+            { status: 500, headers: secHeaders },
+          );
+        }
+        closeActivePty(deletedTab.id);
+        currentTabs = nextTabs;
+
+        return Response.json(
+          { success: true, remainingTabs: currentTabs },
+          { headers: secHeaders },
+        );
+      }
+    }
+
+    // 8. Filesystem API (/api/fs/*)
+    if (url.pathname.startsWith("/api/fs/")) {
+      if (!currentSession) {
+        return Response.json({ error: "Unauthorized" }, { status: 401, headers: secHeaders });
+      }
+
+      // GET /api/fs/list?path=<abs_path>&hidden=<bool>
+      if (url.pathname === "/api/fs/list" && req.method === "GET") {
+        const reqPath = url.searchParams.get("path");
+        const hidden = url.searchParams.get("hidden") === "true";
+        try {
+          const result = listDirectory(reqPath || getDefaultHome(), hidden);
+          return Response.json(result, { headers: secHeaders });
+        } catch (err: any) {
+          return Response.json(
+            { error: err.message || "Failed to list directory" },
+            { status: 400, headers: secHeaders },
+          );
+        }
+      }
+
+      // GET /api/fs/stat?path=<abs_path>
+      if (url.pathname === "/api/fs/stat" && req.method === "GET") {
+        const reqPath = url.searchParams.get("path");
+        if (!reqPath) {
+          return Response.json(
+            { error: "Missing path query parameter" },
+            { status: 400, headers: secHeaders },
+          );
+        }
+        try {
+          const result = statItem(reqPath);
+          return Response.json(result, { headers: secHeaders });
+        } catch (err: any) {
+          return Response.json(
+            { error: err.message || "Failed to stat item" },
+            { status: 404, headers: secHeaders },
+          );
+        }
+      }
+
+      // GET /api/fs/download?path=<abs_path>&inline=<bool>
+      if (url.pathname === "/api/fs/download" && req.method === "GET") {
+        const reqPath = url.searchParams.get("path");
+        if (!reqPath) {
+          return Response.json(
+            { error: "Missing path query parameter" },
+            { status: 400, headers: secHeaders },
+          );
+        }
+        const norm = normalizePath(reqPath);
+        if (!existsSync(norm)) {
+          return Response.json({ error: "File not found" }, { status: 404, headers: secHeaders });
+        }
+        const stat = statSync(norm);
+        if (stat.isDirectory()) {
+          return Response.json(
+            { error: "Cannot download directory directly; use archive" },
+            { status: 400, headers: secHeaders },
+          );
+        }
+        const inline =
+          url.searchParams.get("inline") === "true" || url.searchParams.get("inline") === "1";
+        const file = Bun.file(norm);
+        const downloadHeaders = resolveDownloadHeaders(
+          basename(norm),
+          file.type || "application/octet-stream",
+          inline,
+        );
+        const headers = new Headers(secHeaders);
+        headers.set("Content-Type", downloadHeaders.contentType);
+        headers.set("Content-Disposition", downloadHeaders.contentDisposition);
+        if (downloadHeaders.csp) {
+          headers.set("Content-Security-Policy", downloadHeaders.csp);
+        }
+        return new Response(file, { headers });
+      }
+
+      // POST /api/fs/archive
+      if (url.pathname === "/api/fs/archive" && req.method === "POST") {
+        const contentTypeErr = requireJsonContentType(req, secHeaders);
+        if (contentTypeErr) return contentTypeErr;
+        try {
+          const body = (await req.json().catch(() => ({}))) as { paths?: string[] };
+          if (!body.paths || !Array.isArray(body.paths) || body.paths.length === 0) {
+            return Response.json(
+              { error: "paths array is required" },
+              { status: 400, headers: secHeaders },
+            );
+          }
+          const { stream, archiveName } = await createZipStream(body.paths);
+          const headers = new Headers(secHeaders);
+          headers.set("Content-Type", "application/zip");
+          headers.set("Content-Disposition", `attachment; filename="${archiveName}"`);
+          return new Response(stream, { headers });
+        } catch (err: any) {
+          return Response.json(
+            { error: err.message || "Failed to create archive" },
+            { status: 500, headers: secHeaders },
+          );
+        }
+      }
+
+      // POST /api/fs/upload
+      if (url.pathname === "/api/fs/upload" && req.method === "POST") {
+        try {
+          const formData = await req.formData();
+          const rawTargetDir = (formData.get("targetDir") as string) || "";
+          const targetDir = normalizePath(rawTargetDir);
+          const overwrite = formData.get("overwrite") === "true";
+
+          if (isProtectedPath(targetDir)) {
+            return Response.json(
+              { error: "Target directory is protected" },
+              { status: 403, headers: secHeaders },
+            );
+          }
+
+          if (!existsSync(targetDir)) {
+            mkdirSync(targetDir, { recursive: true });
+          }
+
+          const files = formData.getAll("files") as File[];
+          const relPaths = formData.getAll("relativePaths") as string[];
+
+          const uploaded: string[] = [];
+          const skipped: string[] = [];
+
+          for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const relPath = relPaths[i] || file.name;
+            if (!relPath || typeof relPath !== "string") continue;
+            const safeRel = relPath.replace(/^[/\\]+/, "");
+            const destPath = resolve(targetDir, safeRel);
+            const relFromTarget = relative(targetDir, destPath);
+
+            // Enforce boundary containment within targetDir
+            if (
+              relFromTarget.startsWith("..") ||
+              isAbsolute(relFromTarget) ||
+              relFromTarget === ""
+            ) {
+              continue;
+            }
+            if (isProtectedPath(destPath)) {
+              skipped.push(relPath);
+              continue;
+            }
+
+            if (existsSync(destPath) && !overwrite) {
+              skipped.push(relPath);
+              continue;
+            }
+
+            mkdirSync(dirname(destPath), { recursive: true });
+            await Bun.write(destPath, file);
+            uploaded.push(relPath);
+          }
+
+          return Response.json({ success: true, uploaded, skipped }, { headers: secHeaders });
+        } catch (err: any) {
+          return Response.json(
+            { error: err.message || "Failed to upload files" },
+            { status: 500, headers: secHeaders },
+          );
+        }
+      }
+
+      // POST /api/fs/action
+      if (url.pathname === "/api/fs/action" && req.method === "POST") {
+        const contentTypeErr = requireJsonContentType(req, secHeaders);
+        if (contentTypeErr) return contentTypeErr;
+        try {
+          const body = (await req.json().catch(() => ({}))) as {
+            action?: string;
+            path?: string;
+            paths?: string[];
+            oldPath?: string;
+            newPath?: string;
+            name?: string;
+            parent?: string;
+          };
+
+          if (!body.action) {
+            return Response.json({ error: "Missing action" }, { status: 400, headers: secHeaders });
+          }
+
+          if (body.action === "mkdir") {
+            const rawTarget =
+              body.path || (body.parent && body.name ? join(body.parent, body.name) : "");
+            if (!rawTarget || typeof rawTarget !== "string" || !rawTarget.trim()) {
+              return Response.json(
+                { error: "Missing or invalid path for directory creation" },
+                { status: 400, headers: secHeaders },
+              );
+            }
+            const target = normalizePath(rawTarget);
+            if (isProtectedPath(target)) {
+              return Response.json(
+                { error: "Cannot create directory in protected location" },
+                { status: 403, headers: secHeaders },
+              );
+            }
+            mkdirSync(target, { recursive: true });
+            return Response.json({ success: true, path: target }, { headers: secHeaders });
+          }
+
+          if (body.action === "touch" || body.action === "createFile") {
+            const rawTarget =
+              body.path || (body.parent && body.name ? join(body.parent, body.name) : "");
+            if (!rawTarget || typeof rawTarget !== "string" || !rawTarget.trim()) {
+              return Response.json(
+                { error: "Missing or invalid path for file creation" },
+                { status: 400, headers: secHeaders },
+              );
+            }
+            const target = normalizePath(rawTarget);
+            if (isProtectedPath(target)) {
+              return Response.json(
+                { error: "Cannot create file in protected location" },
+                { status: 403, headers: secHeaders },
+              );
+            }
+            if (!existsSync(target)) {
+              mkdirSync(dirname(target), { recursive: true });
+              writeFileSync(target, "");
+            }
+            return Response.json({ success: true, path: target }, { headers: secHeaders });
+          }
+
+          if (body.action === "rename") {
+            const rawOld = body.oldPath || body.path;
+            const rawNew =
+              body.newPath ||
+              (body.name && rawOld ? join(dirname(normalizePath(rawOld)), body.name) : undefined);
+            if (
+              !rawOld ||
+              typeof rawOld !== "string" ||
+              !rawOld.trim() ||
+              !rawNew ||
+              typeof rawNew !== "string" ||
+              !rawNew.trim()
+            ) {
+              return Response.json(
+                { error: "Both source and destination paths must be provided" },
+                { status: 400, headers: secHeaders },
+              );
+            }
+            const oldP = normalizePath(rawOld);
+            const newP = normalizePath(rawNew);
+            if (isProtectedPath(oldP) || isProtectedPath(newP)) {
+              return Response.json(
+                { error: "Cannot rename protected path" },
+                { status: 403, headers: secHeaders },
+              );
+            }
+            if (!existsSync(oldP)) {
+              return Response.json(
+                { error: "Source path not found" },
+                { status: 404, headers: secHeaders },
+              );
+            }
+            renameSync(oldP, newP);
+            return Response.json(
+              { success: true, oldPath: oldP, newPath: newP },
+              { headers: secHeaders },
+            );
+          }
+
+          if (body.action === "delete") {
+            const rawList = (body.paths || (body.path ? [body.path] : [])).filter(
+              (p): p is string => typeof p === "string" && p.trim().length > 0,
+            );
+            if (rawList.length === 0) {
+              return Response.json(
+                { error: "No valid paths specified for deletion" },
+                { status: 400, headers: secHeaders },
+              );
+            }
+            const toDelete = rawList.map((p) => normalizePath(p));
+            for (const p of toDelete) {
+              if (isProtectedPath(p)) {
+                return Response.json(
+                  { error: `Cannot delete protected path: ${p}` },
+                  { status: 403, headers: secHeaders },
+                );
+              }
+            }
+            for (const p of toDelete) {
+              if (existsSync(p)) {
+                rmSync(p, { recursive: true, force: true });
+              }
+            }
+            return Response.json({ success: true, deleted: toDelete }, { headers: secHeaders });
+          }
+
+          return Response.json(
+            { error: `Unknown action: ${body.action}` },
+            { status: 400, headers: secHeaders },
+          );
+        } catch (err: any) {
+          return Response.json(
+            { error: err.message || "Action failed" },
+            { status: 500, headers: secHeaders },
+          );
+        }
+      }
+    }
+
+    // User Settings API (/api/settings)
+    if (url.pathname === "/api/settings") {
+      if (!currentSession) {
+        return Response.json({ error: "Unauthorized" }, { status: 401, headers: secHeaders });
+      }
+      if (req.method === "GET") {
+        const settings = loadSettings(config.theme);
+        return Response.json(settings, { headers: secHeaders });
+      }
+      if (req.method === "PATCH") {
+        const contentTypeErr = requireJsonContentType(req, secHeaders);
+        if (contentTypeErr) return contentTypeErr;
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+        if (typeof body !== "object" || body === null || Array.isArray(body)) {
+          return Response.json(
+            { error: "Invalid JSON body" },
+            { status: 400, headers: secHeaders },
+          );
+        }
+        if (typeof body.theme === "string" && body.theme.length > 0) {
+          config.theme = body.theme;
+          saveConfig(config, configPath);
+        }
+        const updated = saveSettings(body, config.theme);
+        return Response.json(updated, { headers: secHeaders });
+      }
+      return new Response("Method Not Allowed", { status: 405, headers: secHeaders });
+    }
+
+    // 9. Self-Update System API (/api/system/update/*)
+    if (url.pathname.startsWith("/api/system/update")) {
+      if (!currentSession) {
+        return Response.json({ error: "Unauthorized" }, { status: 401, headers: secHeaders });
+      }
+
+      // GET /api/system/update/check
+      if (url.pathname === "/api/system/update/check" && req.method === "GET") {
+        const force = url.searchParams.get("force") === "true";
+        const currentVersion = getCurrentVersion();
+        const checkRes = await checkLatestVersion(currentVersion, force);
+        const isService = await isManagedService("knife");
+        const activeTabsCount = currentTabs.length;
+        const pkgManager = detectPackageManager();
+
+        return Response.json(
+          {
+            currentVersion: checkRes.currentVersion,
+            latestVersion: checkRes.latestVersion,
+            updateAvailable: checkRes.updateAvailable,
+            cached: checkRes.cached ?? false,
+            isService,
+            activeTabsCount,
+            command: `${pkgManager.command} ${pkgManager.args.join(" ")}`,
+          },
+          { headers: secHeaders },
+        );
+      }
+
+      // POST /api/system/update/apply
+      if (url.pathname === "/api/system/update/apply" && req.method === "POST") {
+        const pkgManager = detectPackageManager();
+        const isService = await isManagedService("knife");
+        const remediationCommand = `${pkgManager.command} ${pkgManager.args.join(" ")}`;
+
+        const stream = new ReadableStream({
+          async start(controller) {
+            const encoder = new TextEncoder();
+            const sendEvent = (event: string, data: Record<string, unknown>) => {
+              controller.enqueue(
+                encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
+              );
+            };
+
+            sendEvent("log", {
+              line: `[update] Starting self-update via ${pkgManager.command}...`,
+            });
+            sendEvent("log", { line: `[update] Command: ${remediationCommand}` });
+
+            const updateResult = await executePackageUpdate((line) => {
+              sendEvent("log", { line });
+            }, pkgManager);
+
+            if (!updateResult.success) {
+              sendEvent("error", {
+                error: updateResult.error || "Update command failed",
+                remediationCommand,
+              });
+              controller.close();
+              return;
+            }
+
+            sendEvent("log", { line: "[update] Initiating server restart..." });
+            sendEvent("complete", {
+              message: "Update installed successfully. Server is restarting.",
+              isService,
+            });
+
+            // Schedule restart
+            triggerRestart({
+              isService,
+              serviceName: "knife",
+            });
+
+            controller.close();
+          },
+        });
+
+        const streamHeaders = new Headers(secHeaders);
+        streamHeaders.set("Content-Type", "text/event-stream; charset=utf-8");
+        streamHeaders.set("Cache-Control", "no-cache, no-transform");
+        streamHeaders.set("Connection", "keep-alive");
+        return new Response(stream, { headers: streamHeaders });
+      }
+    }
+
+    return undefined;
+  },
+});
+
 // Global server instance
 try {
   Bun.serve({
@@ -160,14 +731,15 @@ try {
 
     async fetch(req, server) {
       const url = new URL(req.url);
-      const directIp = server.requestIP(req)?.address || "127.0.0.1";
-      const clientIp = getClientIp(directIp, req.headers, config.trustedProxies);
-      if (shouldLogRequest(url.pathname)) {
-        console.log(formatRequestLog(req.method, url.pathname, clientIp));
-      }
 
       // 1. WebSocket Upgrade Handler
       if (url.pathname === "/ws/terminal" || url.pathname.startsWith("/ws/terminal/")) {
+        const directIp = server.requestIP(req)?.address || "127.0.0.1";
+        const clientIp = getClientIp(directIp, req.headers, config.trustedProxies);
+        if (shouldLogRequest(url.pathname)) {
+          console.log(formatRequestLog(req.method, url.pathname, clientIp));
+        }
+
         const originHeader = req.headers.get("origin");
         if (!isAllowedRequestOrigin(req.headers, config.publicDomain, config.host, config.port)) {
           console.warn(
@@ -211,913 +783,7 @@ try {
         return new Response("WebSocket upgrade failed", { status: 400 });
       }
 
-      // Security headers for HTTP responses
-      const secHeaders = getSecurityHeaders(config);
-
-      // 2. Health check endpoint
-      if (url.pathname === "/health" || url.pathname === "/api/health") {
-        return Response.json({ status: "ok" }, { headers: secHeaders });
-      }
-
-      // 3. Public config endpoint (used by frontend to get domain, theme, callback URL)
-      if (url.pathname === "/api/config/public") {
-        return Response.json(
-          {
-            publicDomain: config.publicDomain,
-            publicScheme: config.publicScheme,
-            theme: config.theme,
-            callbackUrl: config.publicDomain
-              ? `${getPublicOrigin(config)}/auth/github/callback`
-              : `https://<your-public-domain>/auth/github/callback`,
-          },
-          { headers: secHeaders },
-        );
-      }
-
-      // Enforce Origin / Sec-Fetch-Site on all non-GET /api/* requests
-      if (
-        url.pathname.startsWith("/api/") &&
-        req.method !== "GET" &&
-        req.method !== "HEAD" &&
-        req.method !== "OPTIONS"
-      ) {
-        if (!isAllowedRequestOrigin(req.headers, config.publicDomain, config.host, config.port)) {
-          console.warn(
-            `[api] Forbidden origin '${req.headers.get("origin")}' (Sec-Fetch-Site: '${req.headers.get("sec-fetch-site")}') for ${req.method} ${url.pathname} from ${clientIp}`,
-          );
-          return Response.json({ error: "Forbidden origin" }, { status: 403, headers: secHeaders });
-        }
-      }
-
-      // 4. First run setup API
-      if (url.pathname === "/api/setup") {
-        if (req.method !== "POST") {
-          return new Response("Method Not Allowed", { status: 405, headers: secHeaders });
-        }
-
-        const contentTypeErr = requireJsonContentType(req, secHeaders);
-        if (contentTypeErr) return contentTypeErr;
-
-        try {
-          const body = (await req.json()) as {
-            token?: string;
-            publicDomain?: string;
-            publicScheme?: "http" | "https";
-            githubClientId?: string;
-            githubClientSecret?: string;
-            allowedUsername?: string;
-            allowedUserId?: number;
-            theme?: string;
-            trustedProxies?: string[];
-          };
-          console.log(
-            `[setup] Received setup attempt: user=${body.allowedUsername}, domain=${body.publicDomain}`,
-          );
-
-          if (!isFirstRun && !getActiveSetupToken()) {
-            return Response.json(
-              { error: "Setup has already been completed." },
-              { status: 400, headers: secHeaders },
-            );
-          }
-
-          if (!body.token || !verifySetupToken(body.token)) {
-            console.warn(`[setup] Token verification failed from ${clientIp}`);
-            return Response.json(
-              { error: "Invalid or expired setup token." },
-              { status: 403, headers: secHeaders },
-            );
-          }
-
-          if (!body.publicDomain || typeof body.publicDomain !== "string") {
-            return Response.json(
-              { error: "Public domain is required (e.g. knife.example.com)." },
-              { status: 400, headers: secHeaders },
-            );
-          }
-
-          if (!body.githubClientId || !body.githubClientSecret) {
-            return Response.json(
-              { error: "GitHub Client ID and Client Secret are required." },
-              { status: 400, headers: secHeaders },
-            );
-          }
-
-          if (!body.allowedUsername || typeof body.allowedUsername !== "string") {
-            return Response.json(
-              { error: "Allowed GitHub username is required." },
-              { status: 400, headers: secHeaders },
-            );
-          }
-
-          if (
-            body.allowedUserId !== undefined &&
-            (typeof body.allowedUserId !== "number" ||
-              !Number.isInteger(body.allowedUserId) ||
-              body.allowedUserId <= 0)
-          ) {
-            return Response.json(
-              { error: "Allowed GitHub user ID must be a positive integer." },
-              { status: 400, headers: secHeaders },
-            );
-          }
-
-          // Clean up domain (remove leading protocol if entered by user)
-          const cleanDomain = body.publicDomain
-            .trim()
-            .replace(/^https?:\/\//, "")
-            .replace(/\/.*$/, "");
-
-          // Update config
-          config.publicDomain = cleanDomain;
-          config.publicScheme = body.publicScheme === "http" ? "http" : "https";
-          if (body.theme) config.theme = body.theme;
-          if (body.trustedProxies && Array.isArray(body.trustedProxies)) {
-            config.trustedProxies = body.trustedProxies;
-          }
-
-          config.auth = {
-            githubClientId: body.githubClientId.trim(),
-            githubClientSecret: body.githubClientSecret.trim(),
-            allowedUsername: body.allowedUsername.trim(),
-            ...(body.allowedUserId !== undefined ? { allowedUserId: body.allowedUserId } : {}),
-          };
-
-          // Save config to disk
-          saveConfig(config, configPath);
-
-          // Invalidate setup token
-          consumeSetupToken(body.token);
-          isFirstRun = false;
-
-          console.log(
-            `[setup] Setup successfully completed by user '${config.auth.allowedUsername}'!`,
-          );
-
-          return Response.json(
-            {
-              success: true,
-              redirect: "/login",
-            },
-            { headers: secHeaders },
-          );
-        } catch (err) {
-          console.error("[setup] Error processing setup:", err);
-          return Response.json(
-            { error: "Failed to process setup request." },
-            { status: 500, headers: secHeaders },
-          );
-        }
-      }
-
-      // 5. GitHub OAuth Routes
-      if (url.pathname === "/auth/github") {
-        if (isFirstRun || !config.auth) {
-          return Response.redirect("/setup", 302);
-        }
-        const state = crypto.randomUUID();
-        const authUrl = getGitHubOAuthUrl(config, state);
-        const headers = new Headers(secHeaders);
-        const isSecure = config.publicScheme === "https";
-        headers.set(
-          "Set-Cookie",
-          `knife_oauth_state=${state}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600${isSecure ? "; Secure" : ""}`,
-        );
-        headers.set("Location", authUrl);
-        return new Response(null, { status: 302, headers });
-      }
-
-      if (url.pathname === "/auth/github/callback") {
-        const code = url.searchParams.get("code");
-        const state = url.searchParams.get("state");
-        const cookieHeader = req.headers.get("cookie") || "";
-
-        // Verify state
-        const stateCookie = cookieHeader
-          .split(";")
-          .map((c) => c.trim())
-          .find((c) => c.startsWith("knife_oauth_state="))
-          ?.split("=")[1];
-
-        if (!state || !stateCookie || state !== stateCookie) {
-          return new Response("Invalid or expired OAuth state parameter. Please try again.", {
-            status: 400,
-            headers: secHeaders,
-          });
-        }
-
-        if (!code) {
-          return new Response("Missing OAuth code parameter from GitHub.", {
-            status: 400,
-            headers: secHeaders,
-          });
-        }
-
-        const tokenResult = await exchangeGitHubCode(config, code);
-        if (!tokenResult) {
-          return new Response("Failed to exchange GitHub authorization code.", {
-            status: 500,
-            headers: secHeaders,
-          });
-        }
-
-        const user = await fetchGitHubUser(tokenResult.accessToken);
-        if (!user) {
-          return new Response("Failed to fetch GitHub user profile.", {
-            status: 500,
-            headers: secHeaders,
-          });
-        }
-
-        const authResult = authorizeGitHubUser(user, config.auth);
-        if (!authResult.authorized) {
-          console.warn(`[auth] Unauthorized login attempt: ${authResult.reason}`);
-          return new Response(
-            `Access Denied: GitHub user '${user.login}' is not authorized to access this knife instance.`,
-            { status: 403, headers: secHeaders },
-          );
-        }
-
-        if (authResult.pinUserId !== undefined && config.auth) {
-          config.auth.allowedUserId = authResult.pinUserId;
-          saveConfig(config, configPath);
-        }
-
-        // Create authenticated session
-        const sessionToken = createSessionToken(user.login, config.sessionSecret);
-        const cookieVal = createSessionCookieHeader(sessionToken, config);
-
-        const headers = new Headers(secHeaders);
-        headers.set("Set-Cookie", cookieVal);
-        headers.set("Location", "/");
-        return new Response(null, { status: 302, headers });
-      }
-
-      // Logout endpoint
-      if (url.pathname === "/auth/logout") {
-        const logoutSession = getSessionFromCookie(req.headers.get("cookie"), config.sessionSecret);
-        if (logoutSession) {
-          revokeSession(logoutSession.sid);
-        }
-        const headers = new Headers(secHeaders);
-        headers.set("Set-Cookie", createSessionCookieHeader("", config, true));
-        headers.set("Location", "/login");
-        return new Response(null, { status: 302, headers });
-      }
-
-      // Check current session
-      const currentSession = getSessionFromCookie(req.headers.get("cookie"), config.sessionSecret);
-
-      // 6. User Profile Endpoint
-      if (url.pathname === "/api/me") {
-        if (!currentSession) {
-          return Response.json({ authenticated: false }, { status: 401, headers: secHeaders });
-        }
-        return Response.json(
-          {
-            authenticated: true,
-            username: currentSession.username,
-            theme: config.theme,
-            shell: getUserShell(),
-            shellName: getShellName(),
-          },
-          { headers: secHeaders },
-        );
-      }
-
-      // 7. Tabs Management API
-      if (url.pathname === "/api/tabs" || url.pathname.startsWith("/api/tabs/")) {
-        if (!currentSession) {
-          return Response.json({ error: "Unauthorized" }, { status: 401, headers: secHeaders });
-        }
-
-        // GET /api/tabs
-        if (url.pathname === "/api/tabs" && req.method === "GET") {
-          return Response.json(currentTabs, { headers: secHeaders });
-        }
-
-        // POST /api/tabs (Create tab)
-        if (url.pathname === "/api/tabs" && req.method === "POST") {
-          const contentTypeErr = requireJsonContentType(req, secHeaders);
-          if (contentTypeErr) return contentTypeErr;
-          const body = (await req.json().catch(() => ({}))) as {
-            name?: string;
-            cols?: number;
-            rows?: number;
-          };
-          const id = crypto.randomUUID().slice(0, 8);
-          const shellName = getShellName();
-          const tabName = body.name?.trim() || `${shellName} ${currentTabs.length + 1}`;
-
-          const newTab: TabData = {
-            id,
-            name: tabName,
-            order: currentTabs.length,
-            createdAt: Date.now(),
-          };
-
-          const nextTabs = [...currentTabs, newTab];
-          try {
-            saveTabs(nextTabs);
-          } catch (err) {
-            console.error("[server] Failed to save tabs on create:", err);
-            return Response.json(
-              { error: "Failed to persist tabs" },
-              { status: 500, headers: secHeaders },
-            );
-          }
-          currentTabs = nextTabs;
-
-          return Response.json(newTab, { status: 201, headers: secHeaders });
-        }
-
-        // POST /api/tabs/reorder
-        if (url.pathname === "/api/tabs/reorder" && req.method === "POST") {
-          const contentTypeErr = requireJsonContentType(req, secHeaders);
-          if (contentTypeErr) return contentTypeErr;
-          const body = (await req.json().catch(() => ({}))) as { tabIds?: string[] };
-          if (Array.isArray(body.tabIds)) {
-            const idMap = new Map(currentTabs.map((t) => [t.id, t]));
-            const reordered: TabData[] = [];
-            body.tabIds.forEach((id, index) => {
-              const tab = idMap.get(id);
-              if (tab) {
-                reordered.push({ ...tab, order: index });
-                idMap.delete(id);
-              }
-            });
-            // Append any tabs not included in list
-            idMap.forEach((tab) => {
-              reordered.push({ ...tab, order: reordered.length });
-            });
-            try {
-              saveTabs(reordered);
-            } catch (err) {
-              console.error("[server] Failed to save tabs on reorder:", err);
-              return Response.json(
-                { error: "Failed to persist tab order" },
-                { status: 500, headers: secHeaders },
-              );
-            }
-            currentTabs = reordered;
-          }
-          return Response.json(currentTabs, { headers: secHeaders });
-        }
-
-        // Specific Tab Operations: PATCH /api/tabs/:id, DELETE /api/tabs/:id
-        // Tab CWD Endpoint: GET /api/tabs/:id/cwd
-        const cwdMatch = url.pathname.match(/^\/api\/tabs\/([^/]+)\/cwd$/);
-        if (cwdMatch && req.method === "GET") {
-          const targetTabId = cwdMatch[1];
-          const tab = currentTabs.find((t) => t.id === targetTabId);
-          if (!tab) {
-            return Response.json({ error: "Tab not found" }, { status: 404, headers: secHeaders });
-          }
-          const activePty = getActivePty(tab.id);
-          const cwd = activePty?.getCwd() || getDefaultHome();
-          return Response.json({ id: tab.id, cwd }, { headers: secHeaders });
-        }
-
-        const tabId = url.pathname.slice("/api/tabs/".length);
-        const tabIndex = currentTabs.findIndex((t) => t.id === tabId);
-
-        if (tabIndex === -1) {
-          return Response.json({ error: "Tab not found" }, { status: 404, headers: secHeaders });
-        }
-
-        // Rename tab
-        if (req.method === "PATCH") {
-          const contentTypeErr = requireJsonContentType(req, secHeaders);
-          if (contentTypeErr) return contentTypeErr;
-          const body = (await req.json().catch(() => ({}))) as { name?: string };
-          if (body.name && typeof body.name === "string") {
-            const nextTabs = currentTabs.map((t, i) =>
-              i === tabIndex ? { ...t, name: body.name!.trim() } : t,
-            );
-            try {
-              saveTabs(nextTabs);
-            } catch (err) {
-              console.error("[server] Failed to save tabs on rename:", err);
-              return Response.json(
-                { error: "Failed to persist tab rename" },
-                { status: 500, headers: secHeaders },
-              );
-            }
-            currentTabs = nextTabs;
-          }
-          return Response.json(currentTabs[tabIndex], { headers: secHeaders });
-        }
-
-        // Delete / Close tab
-        if (req.method === "DELETE") {
-          const deletedTab = currentTabs[tabIndex];
-          const nextTabs = currentTabs
-            .filter((_, i) => i !== tabIndex)
-            .map((t, i) => ({ ...t, order: i }));
-          try {
-            saveTabs(nextTabs);
-          } catch (err) {
-            console.error("[server] Failed to save tabs on delete:", err);
-            return Response.json(
-              { error: "Failed to persist tab deletion" },
-              { status: 500, headers: secHeaders },
-            );
-          }
-          closeActivePty(deletedTab.id);
-          currentTabs = nextTabs;
-
-          return Response.json(
-            { success: true, remainingTabs: currentTabs },
-            { headers: secHeaders },
-          );
-        }
-      }
-
-      // 8. Filesystem API (/api/fs/*)
-      if (url.pathname.startsWith("/api/fs/")) {
-        if (!currentSession) {
-          return Response.json({ error: "Unauthorized" }, { status: 401, headers: secHeaders });
-        }
-
-        // GET /api/fs/list?path=<abs_path>&hidden=<bool>
-        if (url.pathname === "/api/fs/list" && req.method === "GET") {
-          const reqPath = url.searchParams.get("path");
-          const hidden = url.searchParams.get("hidden") === "true";
-          try {
-            const result = listDirectory(reqPath || getDefaultHome(), hidden);
-            return Response.json(result, { headers: secHeaders });
-          } catch (err: any) {
-            return Response.json(
-              { error: err.message || "Failed to list directory" },
-              { status: 400, headers: secHeaders },
-            );
-          }
-        }
-
-        // GET /api/fs/stat?path=<abs_path>
-        if (url.pathname === "/api/fs/stat" && req.method === "GET") {
-          const reqPath = url.searchParams.get("path");
-          if (!reqPath) {
-            return Response.json(
-              { error: "Missing path query parameter" },
-              { status: 400, headers: secHeaders },
-            );
-          }
-          try {
-            const result = statItem(reqPath);
-            return Response.json(result, { headers: secHeaders });
-          } catch (err: any) {
-            return Response.json(
-              { error: err.message || "Failed to stat item" },
-              { status: 404, headers: secHeaders },
-            );
-          }
-        }
-
-        // GET /api/fs/download?path=<abs_path>&inline=<bool>
-        if (url.pathname === "/api/fs/download" && req.method === "GET") {
-          const reqPath = url.searchParams.get("path");
-          if (!reqPath) {
-            return Response.json(
-              { error: "Missing path query parameter" },
-              { status: 400, headers: secHeaders },
-            );
-          }
-          const norm = normalizePath(reqPath);
-          if (!existsSync(norm)) {
-            return Response.json({ error: "File not found" }, { status: 404, headers: secHeaders });
-          }
-          const stat = statSync(norm);
-          if (stat.isDirectory()) {
-            return Response.json(
-              { error: "Cannot download directory directly; use archive" },
-              { status: 400, headers: secHeaders },
-            );
-          }
-          const inline =
-            url.searchParams.get("inline") === "true" || url.searchParams.get("inline") === "1";
-          const file = Bun.file(norm);
-          const downloadHeaders = resolveDownloadHeaders(
-            basename(norm),
-            file.type || "application/octet-stream",
-            inline,
-          );
-          const headers = new Headers(secHeaders);
-          headers.set("Content-Type", downloadHeaders.contentType);
-          headers.set("Content-Disposition", downloadHeaders.contentDisposition);
-          if (downloadHeaders.csp) {
-            headers.set("Content-Security-Policy", downloadHeaders.csp);
-          }
-          return new Response(file, { headers });
-        }
-
-        // POST /api/fs/archive
-        if (url.pathname === "/api/fs/archive" && req.method === "POST") {
-          const contentTypeErr = requireJsonContentType(req, secHeaders);
-          if (contentTypeErr) return contentTypeErr;
-          try {
-            const body = (await req.json().catch(() => ({}))) as { paths?: string[] };
-            if (!body.paths || !Array.isArray(body.paths) || body.paths.length === 0) {
-              return Response.json(
-                { error: "paths array is required" },
-                { status: 400, headers: secHeaders },
-              );
-            }
-            const { stream, archiveName } = await createZipStream(body.paths);
-            const headers = new Headers(secHeaders);
-            headers.set("Content-Type", "application/zip");
-            headers.set("Content-Disposition", `attachment; filename="${archiveName}"`);
-            return new Response(stream, { headers });
-          } catch (err: any) {
-            return Response.json(
-              { error: err.message || "Failed to create archive" },
-              { status: 500, headers: secHeaders },
-            );
-          }
-        }
-
-        // POST /api/fs/upload
-        if (url.pathname === "/api/fs/upload" && req.method === "POST") {
-          try {
-            const formData = await req.formData();
-            const rawTargetDir = (formData.get("targetDir") as string) || "";
-            const targetDir = normalizePath(rawTargetDir);
-            const overwrite = formData.get("overwrite") === "true";
-
-            if (isProtectedPath(targetDir)) {
-              return Response.json(
-                { error: "Target directory is protected" },
-                { status: 403, headers: secHeaders },
-              );
-            }
-
-            if (!existsSync(targetDir)) {
-              mkdirSync(targetDir, { recursive: true });
-            }
-
-            const files = formData.getAll("files") as File[];
-            const relPaths = formData.getAll("relativePaths") as string[];
-
-            const uploaded: string[] = [];
-            const skipped: string[] = [];
-
-            for (let i = 0; i < files.length; i++) {
-              const file = files[i];
-              const relPath = relPaths[i] || file.name;
-              if (!relPath || typeof relPath !== "string") continue;
-              const safeRel = relPath.replace(/^[/\\]+/, "");
-              const destPath = resolve(targetDir, safeRel);
-              const relFromTarget = relative(targetDir, destPath);
-
-              // Enforce boundary containment within targetDir
-              if (
-                relFromTarget.startsWith("..") ||
-                isAbsolute(relFromTarget) ||
-                relFromTarget === ""
-              ) {
-                continue;
-              }
-              if (isProtectedPath(destPath)) {
-                skipped.push(relPath);
-                continue;
-              }
-
-              if (existsSync(destPath) && !overwrite) {
-                skipped.push(relPath);
-                continue;
-              }
-
-              mkdirSync(dirname(destPath), { recursive: true });
-              await Bun.write(destPath, file);
-              uploaded.push(relPath);
-            }
-
-            return Response.json({ success: true, uploaded, skipped }, { headers: secHeaders });
-          } catch (err: any) {
-            return Response.json(
-              { error: err.message || "Failed to upload files" },
-              { status: 500, headers: secHeaders },
-            );
-          }
-        }
-
-        // POST /api/fs/action
-        if (url.pathname === "/api/fs/action" && req.method === "POST") {
-          const contentTypeErr = requireJsonContentType(req, secHeaders);
-          if (contentTypeErr) return contentTypeErr;
-          try {
-            const body = (await req.json().catch(() => ({}))) as {
-              action?: string;
-              path?: string;
-              paths?: string[];
-              oldPath?: string;
-              newPath?: string;
-              name?: string;
-              parent?: string;
-            };
-
-            if (!body.action) {
-              return Response.json(
-                { error: "Missing action" },
-                { status: 400, headers: secHeaders },
-              );
-            }
-
-            if (body.action === "mkdir") {
-              const rawTarget =
-                body.path || (body.parent && body.name ? join(body.parent, body.name) : "");
-              if (!rawTarget || typeof rawTarget !== "string" || !rawTarget.trim()) {
-                return Response.json(
-                  { error: "Missing or invalid path for directory creation" },
-                  { status: 400, headers: secHeaders },
-                );
-              }
-              const target = normalizePath(rawTarget);
-              if (isProtectedPath(target)) {
-                return Response.json(
-                  { error: "Cannot create directory in protected location" },
-                  { status: 403, headers: secHeaders },
-                );
-              }
-              mkdirSync(target, { recursive: true });
-              return Response.json({ success: true, path: target }, { headers: secHeaders });
-            }
-
-            if (body.action === "touch" || body.action === "createFile") {
-              const rawTarget =
-                body.path || (body.parent && body.name ? join(body.parent, body.name) : "");
-              if (!rawTarget || typeof rawTarget !== "string" || !rawTarget.trim()) {
-                return Response.json(
-                  { error: "Missing or invalid path for file creation" },
-                  { status: 400, headers: secHeaders },
-                );
-              }
-              const target = normalizePath(rawTarget);
-              if (isProtectedPath(target)) {
-                return Response.json(
-                  { error: "Cannot create file in protected location" },
-                  { status: 403, headers: secHeaders },
-                );
-              }
-              if (!existsSync(target)) {
-                mkdirSync(dirname(target), { recursive: true });
-                writeFileSync(target, "");
-              }
-              return Response.json({ success: true, path: target }, { headers: secHeaders });
-            }
-
-            if (body.action === "rename") {
-              const rawOld = body.oldPath || body.path;
-              const rawNew =
-                body.newPath ||
-                (body.name && rawOld ? join(dirname(normalizePath(rawOld)), body.name) : undefined);
-              if (
-                !rawOld ||
-                typeof rawOld !== "string" ||
-                !rawOld.trim() ||
-                !rawNew ||
-                typeof rawNew !== "string" ||
-                !rawNew.trim()
-              ) {
-                return Response.json(
-                  { error: "Both source and destination paths must be provided" },
-                  { status: 400, headers: secHeaders },
-                );
-              }
-              const oldP = normalizePath(rawOld);
-              const newP = normalizePath(rawNew);
-              if (isProtectedPath(oldP) || isProtectedPath(newP)) {
-                return Response.json(
-                  { error: "Cannot rename protected path" },
-                  { status: 403, headers: secHeaders },
-                );
-              }
-              if (!existsSync(oldP)) {
-                return Response.json(
-                  { error: "Source path not found" },
-                  { status: 404, headers: secHeaders },
-                );
-              }
-              renameSync(oldP, newP);
-              return Response.json(
-                { success: true, oldPath: oldP, newPath: newP },
-                { headers: secHeaders },
-              );
-            }
-
-            if (body.action === "delete") {
-              const rawList = (body.paths || (body.path ? [body.path] : [])).filter(
-                (p): p is string => typeof p === "string" && p.trim().length > 0,
-              );
-              if (rawList.length === 0) {
-                return Response.json(
-                  { error: "No valid paths specified for deletion" },
-                  { status: 400, headers: secHeaders },
-                );
-              }
-              const toDelete = rawList.map((p) => normalizePath(p));
-              for (const p of toDelete) {
-                if (isProtectedPath(p)) {
-                  return Response.json(
-                    { error: `Cannot delete protected path: ${p}` },
-                    { status: 403, headers: secHeaders },
-                  );
-                }
-              }
-              for (const p of toDelete) {
-                if (existsSync(p)) {
-                  rmSync(p, { recursive: true, force: true });
-                }
-              }
-              return Response.json({ success: true, deleted: toDelete }, { headers: secHeaders });
-            }
-
-            return Response.json(
-              { error: `Unknown action: ${body.action}` },
-              { status: 400, headers: secHeaders },
-            );
-          } catch (err: any) {
-            return Response.json(
-              { error: err.message || "Action failed" },
-              { status: 500, headers: secHeaders },
-            );
-          }
-        }
-      }
-
-      // 8. Theme preference endpoint
-      if (url.pathname === "/api/theme") {
-        if (req.method === "POST") {
-          if (!currentSession) {
-            return Response.json({ error: "Unauthorized" }, { status: 401, headers: secHeaders });
-          }
-          const contentTypeErr = requireJsonContentType(req, secHeaders);
-          if (contentTypeErr) return contentTypeErr;
-          const body = (await req.json().catch(() => ({}))) as { theme?: unknown };
-          if (typeof body?.theme !== "string" || !THEME_MAP.has(body.theme)) {
-            return Response.json({ error: "Invalid theme" }, { status: 400, headers: secHeaders });
-          }
-          config.theme = body.theme;
-          saveConfig(config, configPath);
-          return Response.json({ theme: config.theme }, { headers: secHeaders });
-        }
-        return Response.json({ theme: config.theme }, { headers: secHeaders });
-      }
-
-      // User Settings API (/api/settings)
-      if (url.pathname === "/api/settings") {
-        if (!currentSession) {
-          return Response.json({ error: "Unauthorized" }, { status: 401, headers: secHeaders });
-        }
-        if (req.method === "GET") {
-          const settings = loadSettings(config.theme);
-          return Response.json(settings, { headers: secHeaders });
-        }
-        if (req.method === "PATCH") {
-          const contentTypeErr = requireJsonContentType(req, secHeaders);
-          if (contentTypeErr) return contentTypeErr;
-          const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-          if (typeof body !== "object" || body === null || Array.isArray(body)) {
-            return Response.json(
-              { error: "Invalid JSON body" },
-              { status: 400, headers: secHeaders },
-            );
-          }
-          if (typeof body.theme === "string" && body.theme.length > 0) {
-            config.theme = body.theme;
-            saveConfig(config, configPath);
-          }
-          const updated = saveSettings(body, config.theme);
-          return Response.json(updated, { headers: secHeaders });
-        }
-        return new Response("Method Not Allowed", { status: 405, headers: secHeaders });
-      }
-
-      // 9. Self-Update System API (/api/system/update/*)
-      if (url.pathname.startsWith("/api/system/update")) {
-        if (!currentSession) {
-          return Response.json({ error: "Unauthorized" }, { status: 401, headers: secHeaders });
-        }
-
-        // GET /api/system/update/check
-        if (url.pathname === "/api/system/update/check" && req.method === "GET") {
-          const force = url.searchParams.get("force") === "true";
-          const currentVersion = getCurrentVersion();
-          const checkRes = await checkLatestVersion(currentVersion, force);
-          const isService = await isManagedService("knife");
-          const activeTabsCount = currentTabs.length;
-          const pkgManager = detectPackageManager();
-
-          return Response.json(
-            {
-              currentVersion: checkRes.currentVersion,
-              latestVersion: checkRes.latestVersion,
-              updateAvailable: checkRes.updateAvailable,
-              cached: checkRes.cached ?? false,
-              isService,
-              activeTabsCount,
-              command: `${pkgManager.command} ${pkgManager.args.join(" ")}`,
-            },
-            { headers: secHeaders },
-          );
-        }
-
-        // POST /api/system/update/apply
-        if (url.pathname === "/api/system/update/apply" && req.method === "POST") {
-          const pkgManager = detectPackageManager();
-          const isService = await isManagedService("knife");
-          const remediationCommand = `${pkgManager.command} ${pkgManager.args.join(" ")}`;
-
-          const stream = new ReadableStream({
-            async start(controller) {
-              const encoder = new TextEncoder();
-              const sendEvent = (event: string, data: Record<string, unknown>) => {
-                controller.enqueue(
-                  encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
-                );
-              };
-
-              sendEvent("log", {
-                line: `[update] Starting self-update via ${pkgManager.command}...`,
-              });
-              sendEvent("log", { line: `[update] Command: ${remediationCommand}` });
-
-              const updateResult = await executePackageUpdate((line) => {
-                sendEvent("log", { line });
-              }, pkgManager);
-
-              if (!updateResult.success) {
-                sendEvent("error", {
-                  error: updateResult.error || "Update command failed",
-                  remediationCommand,
-                });
-                controller.close();
-                return;
-              }
-
-              sendEvent("log", { line: "[update] Initiating server restart..." });
-              sendEvent("complete", {
-                message: "Update installed successfully. Server is restarting.",
-                isService,
-              });
-
-              // Schedule restart
-              triggerRestart({
-                isService,
-                serviceName: "knife",
-              });
-
-              controller.close();
-            },
-          });
-
-          const streamHeaders = new Headers(secHeaders);
-          streamHeaders.set("Content-Type", "text/event-stream; charset=utf-8");
-          streamHeaders.set("Cache-Control", "no-cache, no-transform");
-          streamHeaders.set("Connection", "keep-alive");
-          return new Response(stream, { headers: streamHeaders });
-        }
-      }
-
-      // 9. Static Asset Serving
-      // Try serving exact static file from build/client
-      const staticFile = serveStaticFile(url.pathname, undefined, secHeaders);
-      if (staticFile) {
-        return staticFile;
-      }
-
-      // 10. SPA / Page Routing
-      // Handle redirects for setup and login
-      if (isFirstRun) {
-        if (!url.pathname.startsWith("/setup")) {
-          return Response.redirect("/setup", 302);
-        }
-      } else {
-        if (url.pathname === "/setup") {
-          return Response.redirect("/", 302);
-        }
-        if (!currentSession && url.pathname !== "/login") {
-          return Response.redirect("/login", 302);
-        }
-        if (currentSession && url.pathname === "/login") {
-          return Response.redirect("/", 302);
-        }
-      }
-
-      // Serve index.html for all SPA routes
-      const indexHtml = serveStaticFile("/index.html", "text/html; charset=utf-8");
-      if (indexHtml) {
-        const text = await indexHtml.text();
-        const headers = new Headers(secHeaders);
-        headers.set("Content-Type", "text/html; charset=utf-8");
-        headers.set("Cache-Control", "no-cache");
-        return new Response(text, { headers });
-      }
-
-      return new Response("Application not built. Please run 'bun run build'.", {
-        status: 503,
-        headers: secHeaders,
-      });
+      return app.fetch(req, { server });
     },
   });
 
