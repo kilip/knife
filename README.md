@@ -1,20 +1,20 @@
 # knife 🔪
 
-A single-user self-hosted web terminal with multi-tab support, backed by tmux so sessions survive browser refreshes, network disconnects, and server restarts. Runs on Linux only and designed to be served behind a reverse proxy (e.g. Caddy) on a user-configured public domain.
+A single-user self-hosted web terminal with multi-tab support, PWA, and integrated file browser. Powered by Bun's native PTY engine and designed to be served behind a reverse proxy (e.g. Caddy) on a user-configured public domain.
 
 ---
 
 ## Highlights
 
-- **Persistent tmux sessions**: Each tab maps to a dedicated session on an isolated tmux socket (`tmux -L knife`) using a knife-owned minimal config. Your own tmux sessions are completely unaffected.
-- **Resilient WebSockets**: Closing the tab or refreshing the page only detaches the client; tmux keeps running in the background. Auto-reconnect with exponential backoff and application-level ping/pong heartbeats.
-- **Native Bun PTY**: Uses Bun's native `Bun.Terminal` PTY engine (no native C++ addons or node-pty compilation needed).
-- **React Router 8 + Tailwind CSS**: Clean single-page application built on React Router 8 (framework mode) with CSS-variable-driven theming.
+- **Native Bun PTY**: Uses Bun's native `Bun.Terminal` PTY engine spawning your login shell (`$SHELL -l`) directly — no native C++ addons, `node-pty`, or `tmux` required.
+- **Resilient WebSockets**: Disconnecting or refreshing the page keeps the PTY alive for a 60-second grace period and replays the 128 KB rolling output buffer on reconnect. Auto-reconnect with exponential backoff and application-level ping/pong heartbeats.
+- **React Router 8 + Tailwind CSS**: Clean single-page application built on React Router 8 (framework mode, `ssr: false`) with CSS-variable-driven theming.
 - **Full xterm.js feature set**: Fit, WebLinks, WebGL with Canvas/DOM fallbacks, Unicode 11, OSC 52 clipboard sync, truecolor (24-bit), and mouse reporting.
 - **5 Built-in Themes**: Catppuccin Mocha (default), Tokyo Night, Nord, Gruvbox Dark, and Dracula. One unified definition powers both Tailwind UI tokens and the 16-color terminal palette, with zero flash on initial load.
 - **Single-User Security**: GitHub OAuth 2.0 restricted to a single configured username. First-run wizard protected by a one-time console setup token.
 - **Progressive Web App (PWA)**: Serwist-powered service worker with precached application shell, standalone installability, offline banner, safe-area insets, and dynamic theme-color meta synchronization.
-- **Integrated File Browser & Transfers**: Left-docked split pane on desktop and slide-over drawer on mobile. Breadcrumbs navigation, sortable flat list, hidden files toggle, inline previews for text & images (<2MB), two-way drag-and-drop (drop desktop files onto the terminal canvas to upload to active tab CWD; drag browser files to paste shell-escaped paths), demand-driven tmux CWD synchronization, on-the-fly streaming `.zip` downloads with zero disk staging, and floating transfer queue drawer with speed and progress indicators.
+- **Integrated File Browser & Transfers**: Left-docked split pane on desktop and slide-over drawer on mobile. Breadcrumbs navigation, sortable flat list, hidden files toggle, inline previews for text & images (<2MB), two-way drag-and-drop (drop desktop files onto the terminal canvas to upload to active tab CWD; drag browser files to paste shell-escaped paths), live CWD synchronization, on-the-fly streaming `.zip` downloads with zero disk staging, and floating transfer queue drawer with speed and progress indicators.
+- **Quick Keys & Settings**: Toggleable touch/quick-keys bar (`Esc`, `Tab`, `Ctrl+C`, `Ctrl+V`, arrow keys), customizable terminal font/cursor/scrollback settings, and built-in self-update from the Settings page.
 
 ---
 
@@ -29,38 +29,23 @@ Reverse Proxy (Caddy / Nginx, terminates TLS)
        ▼ (HTTP / WS on loopback, e.g. 127.0.0.1:3000)
 Knife Bun HTTP & WebSocket Server
        │
-       ├─► Bun.Terminal PTY (tmux attach-session -t knife-<id>)
-       │         │
-       │         ▼
-       └─► Dedicated tmux daemon (-L knife socket, config data/knife-tmux.conf)
-                 ├── knife-tab-1 (Shell 1)
-                 ├── knife-tab-2 (Shell 2)
-                 └── knife-tab-3 (Shell 3)
+       └─► In-memory PTY Registry (tabId -> PtySession via Bun.Terminal)
+                 ├── knife-<id-1> ($SHELL -l, 128 KB rolling buffer)
+                 ├── knife-<id-2> ($SHELL -l, 128 KB rolling buffer)
+                 └── knife-<id-3> ($SHELL -l, 128 KB rolling buffer)
 ```
 
-- **WebSocket Reconnect**: On reconnection or server restart, knife reconciles active tmux sessions with `tabs.json`. Active sessions are re-adopted seamlessly without losing your terminal scrollback or running processes.
-- **Explicit Close**: Explicitly closing a tab terminates its tmux session (`tmux -L knife kill-session -t knife-<id>`) with user confirmation.
+- **Tab Persistence**: Tab metadata (`id`, `name`, `sessionName`, `order`, `createdAt`) is persisted in `<dataDir>/tabs.json`.
+- **WebSocket Reconnect**: When a client disconnects, Knife keeps the in-memory `PtySession` alive for a 60-second grace period. Reconnecting within that window cancels the timer and replays the 128 KB rolling output buffer.
+- **Explicit Close**: Closing a tab immediately terminates its `PtySession` and removes it from `tabs.json`.
 
 ---
 
 ## Prerequisites
 
-- **Linux** (x86_64 or aarch64)
+- **Linux** (x86_64 or aarch64; primary target)
 - **Bun** (v1.2+)
-- **tmux** (v3.0+)
-
-Install tmux if not already present:
-
-```bash
-# Debian / Ubuntu
-sudo apt-get install -y tmux
-
-# Arch Linux
-sudo pacman -S tmux
-
-# Fedora / RHEL
-sudo dnf install -y tmux
-```
+- **tmux** _(optional)_: Not required for terminal sessions; used only as a fallback for CWD lookup or cleaning up legacy `knife-*` sessions if present.
 
 ---
 
@@ -161,6 +146,9 @@ Both space-separated (`knife service <cmd>`) and colon-separated (`knife service
   - `--dir <path>`: Working directory for state and storage.
   - `-p, --port <port>`: Explicit port override.
   - `--host <ip>`: Explicit host override.
+  - `-d, --domain <domain>`: Explicit public domain override.
+  - `--name <str>`: Custom service name (default: `knife`).
+  - `--user`: Install as user-level service/agent (default).
   - `--system`: Install as a system-wide daemon (requires `sudo` / Administrator).
 - **`knife service start`**: Starts the registered background service.
 - **`knife service stop`**: Stops the running service.
@@ -217,7 +205,7 @@ CLI Flags > Environment Variables > config.json > Defaults
 - `KNIFE_PORT`: Listen port number
 - `KNIFE_PUBLIC_DOMAIN`: Public domain (e.g. `knife.itstoni.com`)
 - `KNIFE_CONFIG_PATH`: Path to configuration file
-- `KNIFE_DATA_DIR`: Directory for tabs persistence and tmux config
+- `KNIFE_DATA_DIR`: Directory for persistent `tabs.json` and `settings.json`
 - `KNIFE_SESSION_SECRET`: Secret key used for signing session cookies
 
 ### `config.json` Example
@@ -252,6 +240,9 @@ CLI Flags > Environment Variables > config.json > Defaults
 | <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>&larr;</kbd> / <kbd>&rarr;</kbd> | Move active tab position left / right       |
 | <kbd>Alt</kbd> + <kbd>R</kbd>                                             | Rename active tab                           |
 | Double-click tab                                                          | Inline rename active tab                    |
+| <kbd>Alt</kbd> + <kbd>F</kbd>                                             | Toggle fullscreen                           |
+| <kbd>Ctrl</kbd> / <kbd>Cmd</kbd> + <kbd>+</kbd> / <kbd>-</kbd>            | Increase / decrease terminal font size      |
+| <kbd>Ctrl</kbd> / <kbd>Cmd</kbd> + <kbd>0</kbd>                           | Reset terminal font size                    |
 | <kbd>Ctrl</kbd> + <kbd>E</kbd>                                            | Toggle file browser sidebar                 |
 | <kbd>Ctrl</kbd> + <kbd>H</kbd>                                            | Toggle hidden files in file browser         |
 | <kbd>Ctrl</kbd> / <kbd>Cmd</kbd> + <kbd>,</kbd>                           | Open user settings page                     |
@@ -266,6 +257,10 @@ bun test
 
 # Type-check TypeScript
 bun run typecheck
+
+# Lint and format with Biome
+bun run lint
+bun run format
 
 # Build client production bundle
 bun run build
