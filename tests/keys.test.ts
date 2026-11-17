@@ -70,9 +70,9 @@ describe("QuickKeysBar & Terminal Keyboard Helpers", () => {
     );
     expect(shortcuts).toContain('e.key === "e" || e.key === "E"');
 
-    const terminalTab = readFileSync(join(process.cwd(), "app/components/TerminalTab.tsx"), "utf8");
-    expect(terminalTab).toMatch(/e\.key === "e"\s*\|\|\s*e\.key === "E"/);
+    const terminalTab = readFileSync(join(process.cwd(), "app/hooks/useXterm.ts"), "utf8");
+    expect(terminalTab).toMatch(/"e",\s*"E"/);
     // Ensure Ctrl+B is no longer intercepted in attachCustomKeyEventHandler
-    expect(terminalTab).not.toMatch(/e\.key === "b"\s*\|\|\s*e\.key === "B"/);
+    expect(terminalTab).not.toMatch(/"b",\s*"B"/);
   });
 });

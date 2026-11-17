@@ -1,15 +1,9 @@
-import { CanvasAddon } from "@xterm/addon-canvas";
-import { FitAddon } from "@xterm/addon-fit";
-import { Unicode11Addon } from "@xterm/addon-unicode11";
-import { WebLinksAddon } from "@xterm/addon-web-links";
-import { WebglAddon } from "@xterm/addon-webgl";
-import { Terminal } from "@xterm/xterm";
 import { Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import "@xterm/xterm/css/xterm.css";
-import type { KnifeTheme } from "~/utils/themes";
+import { type ConnectionStatus, useTerminalSocket } from "~/hooks/useTerminalSocket";
+import { useXterm, type XtermOptions } from "~/hooks/useXterm";
 
-export type ConnectionStatus = "connecting" | "connected" | "reconnecting" | "disconnected";
+export type { ConnectionStatus };
 
 export interface TerminalActions {
   sendInput: (data: string) => void;
@@ -19,18 +13,9 @@ export interface TerminalActions {
   focus: () => void;
 }
 
-interface TerminalTabProps {
+interface TerminalTabProps extends XtermOptions {
   tabId: string;
   isActive: boolean;
-  theme: KnifeTheme;
-  fontSize?: number;
-  fontFamily?: string;
-  lineHeight?: number;
-  cursorStyle?: "block" | "underline" | "bar";
-  cursorBlink?: boolean;
-  scrollback?: number;
-  copyOnSelect?: boolean;
-  bellStyle?: "none" | "visual" | "sound";
   onProcessExit?: (tabId: string, exitCode: number) => void;
   onStatusChange?: (status: ConnectionStatus) => void;
   onUploadToCwd?: (files: File[]) => void;
@@ -41,67 +26,65 @@ interface TerminalTabProps {
 export function TerminalTab({
   tabId,
   isActive,
-  theme,
-  fontSize,
-  fontFamily,
-  lineHeight,
-  cursorStyle,
-  cursorBlink,
-  scrollback,
-  copyOnSelect,
-  bellStyle,
   onProcessExit,
   onStatusChange,
   onUploadToCwd,
   onRegisterActions,
   onRegisterInput,
+  ...xtermOptions
 }: TerminalTabProps) {
+  const { theme } = xtermOptions;
   const containerRef = useRef<HTMLDivElement>(null);
-  const termRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const statusRef = useRef<ConnectionStatus>("connecting");
-
   const [isDragOver, setIsDragOver] = useState(false);
   const dragCounterRef = useRef(0);
 
+  // xterm callbacks are bound to the socket below (declared after xterm so the
+  // terminal exists before the socket connects).
+  const socketRef = useRef<ReturnType<typeof useTerminalSocket> | null>(null);
+  const { termRef, fitAddonRef } = useXterm({
+    ...xtermOptions,
+    tabId,
+    isActive,
+    containerRef,
+    onData: (data) => socketRef.current?.sendInput(data),
+    onResize: (cols, rows) => socketRef.current?.sendResize(cols, rows),
+    onRefresh: () => socketRef.current?.sendRefresh(),
+  });
+  const socket = useTerminalSocket({
+    tabId,
+    termRef,
+    fitAddonRef,
+    onStatusChange,
+    onProcessExit,
+  });
+  socketRef.current = socket;
+  const { sendInput } = socket;
+
   useEffect(() => {
+    const send = (data: string) => {
+      sendInput(data);
+      termRef.current?.focus();
+    };
     if (onRegisterActions) {
-      const actions: TerminalActions = {
-        sendInput: (data: string) => {
-          if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({ type: "input", data }));
-          }
-          termRef.current?.focus();
-        },
+      onRegisterActions(tabId, {
+        sendInput: send,
         getSelection: () => termRef.current?.getSelection() || "",
         hasSelection: () => Boolean(termRef.current?.hasSelection()),
         clearSelection: () => termRef.current?.clearSelection(),
         focus: () => termRef.current?.focus(),
-      };
-      onRegisterActions(tabId, actions);
-      return () => {
-        onRegisterActions(tabId, null);
-      };
-    } else if (onRegisterInput) {
-      onRegisterInput(tabId, (data: string) => {
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-          wsRef.current.send(JSON.stringify({ type: "input", data }));
-        }
-        termRef.current?.focus();
       });
-      return () => {
-        onRegisterInput(tabId, null);
-      };
+      return () => onRegisterActions(tabId, null);
     }
-  }, [tabId, onRegisterActions, onRegisterInput]);
+    if (onRegisterInput) {
+      onRegisterInput(tabId, send);
+      return () => onRegisterInput(tabId, null);
+    }
+  }, [tabId, onRegisterActions, onRegisterInput, sendInput, termRef]);
 
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
     dragCounterRef.current++;
-    if (e.dataTransfer.types.includes("Files")) {
-      setIsDragOver(true);
-    }
+    if (e.dataTransfer.types.includes("Files")) setIsDragOver(true);
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
@@ -126,464 +109,16 @@ export function TerminalTab({
     // Case 1: Internal drag from file browser
     const customPath = e.dataTransfer.getData("application/x-knife-file-path");
     if (customPath) {
-      const escaped = `'${customPath.replace(/'/g, `'\\''`)}' `;
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: "input", data: escaped }));
-      }
+      sendInput(`'${customPath.replace(/'/g, `'\\''`)}' `);
       termRef.current?.focus();
       return;
     }
 
     // Case 2: External OS desktop file drop
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const files = Array.from(e.dataTransfer.files);
-      onUploadToCwd?.(files);
+      onUploadToCwd?.(Array.from(e.dataTransfer.files));
     }
   };
-  // Keep latest onStatusChange callback ref
-  const onStatusChangeRef = useRef(onStatusChange);
-  useEffect(() => {
-    onStatusChangeRef.current = onStatusChange;
-  }, [onStatusChange]);
-  const onProcessExitRef = useRef(onProcessExit);
-  useEffect(() => {
-    onProcessExitRef.current = onProcessExit;
-  }, [onProcessExit]);
-  // Keep latest isActive ref for observers and callbacks
-  const isActiveRef = useRef(isActive);
-  useEffect(() => {
-    isActiveRef.current = isActive;
-  }, [isActive]);
-
-  // Sync font size changes to xterm.js instance
-  useEffect(() => {
-    if (termRef.current && fontSize && termRef.current.options.fontSize !== fontSize) {
-      termRef.current.options.fontSize = fontSize;
-      try {
-        fitAddonRef.current?.fit();
-        const cols = termRef.current.cols;
-        const rows = termRef.current.rows;
-        if (cols && rows && wsRef.current?.readyState === WebSocket.OPEN) {
-          wsRef.current.send(JSON.stringify({ type: "resize", cols, rows }));
-        }
-      } catch {}
-    }
-  }, [fontSize]);
-
-  useEffect(() => {
-    if (termRef.current && fontFamily && termRef.current.options.fontFamily !== fontFamily) {
-      termRef.current.options.fontFamily = fontFamily;
-      try {
-        fitAddonRef.current?.fit();
-      } catch {}
-    }
-  }, [fontFamily]);
-
-  useEffect(() => {
-    if (termRef.current && lineHeight && termRef.current.options.lineHeight !== lineHeight) {
-      termRef.current.options.lineHeight = lineHeight;
-      try {
-        fitAddonRef.current?.fit();
-      } catch {}
-    }
-  }, [lineHeight]);
-
-  useEffect(() => {
-    if (termRef.current && cursorStyle) {
-      termRef.current.options.cursorStyle = cursorStyle;
-    }
-  }, [cursorStyle]);
-
-  useEffect(() => {
-    if (termRef.current && cursorBlink !== undefined) {
-      termRef.current.options.cursorBlink = cursorBlink;
-    }
-  }, [cursorBlink]);
-
-  const updateStatus = (newStatus: ConnectionStatus) => {
-    statusRef.current = newStatus;
-    onStatusChangeRef.current?.(newStatus);
-  };
-
-  // Sync theme changes to xterm.js instance
-  useEffect(() => {
-    if (termRef.current) {
-      termRef.current.options.theme = theme.terminal;
-    }
-  }, [theme]);
-
-  // When tab becomes active, trigger fit, focus, and refresh
-  useEffect(() => {
-    if (isActive && termRef.current && fitAddonRef.current) {
-      const timer = setTimeout(() => {
-        try {
-          fitAddonRef.current?.fit();
-          termRef.current?.focus();
-          const cols = termRef.current?.cols;
-          const rows = termRef.current?.rows;
-          if (cols && rows && wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({ type: "resize", cols, rows }));
-            wsRef.current.send(JSON.stringify({ type: "refresh" }));
-          }
-        } catch {}
-      }, 50);
-      return () => clearTimeout(timer);
-    }
-  }, [isActive]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: initialize terminal and WebSocket once per tabId
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    let isDisposed = false;
-    let reconnectAttempts = 0;
-    let shouldReconnect = true;
-    let reconnectTimer: number | NodeJS.Timeout | undefined;
-    let heartbeatTimer: number | NodeJS.Timeout | undefined;
-    let resizeDebounceTimer: number | NodeJS.Timeout | undefined;
-
-    // 1. Initialize Terminal
-    const term = new Terminal({
-      cursorBlink: cursorBlink ?? true,
-      cursorStyle: cursorStyle ?? "block",
-      fontSize: fontSize ?? 15,
-      fontFamily: fontFamily ?? "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-      lineHeight: lineHeight ?? 1.2,
-      theme: theme.terminal,
-      allowProposedApi: true,
-      scrollback: scrollback ?? 50000,
-    });
-    termRef.current = term;
-
-    // 2. Load Addons
-    const fitAddon = new FitAddon();
-    fitAddonRef.current = fitAddon;
-    term.loadAddon(fitAddon);
-
-    const webLinksAddon = new WebLinksAddon();
-    term.loadAddon(webLinksAddon);
-
-    const unicode11Addon = new Unicode11Addon();
-    term.loadAddon(unicode11Addon);
-    term.unicode.activeVersion = "11";
-
-    term.open(containerRef.current);
-
-    // 3. Renderer with Fallback: WebGL -> Canvas -> DOM
-    try {
-      const webglAddon = new WebglAddon();
-      webglAddon.onContextLoss(() => {
-        webglAddon.dispose();
-      });
-      term.loadAddon(webglAddon);
-    } catch {
-      try {
-        const canvasAddon = new CanvasAddon();
-        term.loadAddon(canvasAddon);
-      } catch {
-        // Fallback to default DOM renderer
-      }
-    }
-
-    // 4. OSC 52 Clipboard handler
-    term.parser.registerOscHandler(52, (data) => {
-      // OSC 52 syntax: Pc;Pd where Pd is base64 encoded clipboard content
-      const parts = data.split(";");
-      if (parts.length >= 2) {
-        const base64Content = parts.slice(1).join(";");
-        try {
-          const decoded = atob(base64Content);
-          navigator.clipboard?.writeText(decoded).catch(() => {});
-        } catch {}
-      }
-      return true;
-    });
-
-    if (copyOnSelect) {
-      term.onSelectionChange(() => {
-        if (term.hasSelection()) {
-          const selectedText = term.getSelection();
-          if (selectedText) {
-            navigator.clipboard?.writeText(selectedText).catch(() => {});
-          }
-        }
-      });
-    }
-
-    if (bellStyle === "visual") {
-      term.onBell(() => {
-        const el = containerRef.current;
-        if (el) {
-          el.classList.add("opacity-60");
-          setTimeout(() => el.classList.remove("opacity-60"), 100);
-        }
-      });
-    }
-    // Let app shortcuts pass through
-    term.attachCustomKeyEventHandler((e) => {
-      if (
-        e.altKey &&
-        (e.key === "t" ||
-          e.key === "T" ||
-          e.key === "w" ||
-          e.key === "W" ||
-          e.key === "f" ||
-          e.key === "F" ||
-          /^[1-9]$/.test(e.key) ||
-          e.key === "ArrowLeft" ||
-          e.key === "ArrowRight")
-      ) {
-        return false;
-      }
-      if (
-        (e.ctrlKey || e.metaKey) &&
-        (e.key === "=" ||
-          e.key === "+" ||
-          e.key === "-" ||
-          e.key === "0" ||
-          e.key === "e" ||
-          e.key === "E" ||
-          e.key === ",")
-      ) {
-        return false;
-      }
-      // Smart Ctrl+C: If text is selected in xterm, copy to clipboard on keydown instead of sending SIGINT
-      if ((e.ctrlKey || e.metaKey) && (e.key === "c" || e.key === "C") && e.type === "keydown") {
-        if (term.hasSelection()) {
-          const selectedText = term.getSelection();
-          if (selectedText) {
-            navigator.clipboard?.writeText(selectedText).catch(() => {});
-          }
-          return false;
-        }
-      }
-      return true;
-    });
-
-    // 5. Connect WebSocket with auto-reconnect & exponential backoff
-    function connect() {
-      if (isDisposed) return;
-
-      if (reconnectAttempts > 0) {
-        updateStatus("reconnecting");
-      } else {
-        updateStatus("connecting");
-      }
-
-      try {
-        fitAddon.fit();
-      } catch {}
-
-      const initialCols = term.cols || 80;
-      const initialRows = term.rows || 24;
-      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const wsUrl = `${protocol}//${window.location.host}/ws/terminal?tabId=${encodeURIComponent(tabId)}&cols=${initialCols}&rows=${initialRows}`;
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-
-      let lastMessageTime = Date.now();
-
-      ws.onopen = () => {
-        if (isDisposed) {
-          ws.close();
-          return;
-        }
-        reconnectAttempts = 0;
-        updateStatus("connected");
-
-        // Fit & notify backend of terminal dimensions
-        try {
-          fitAddon.fit();
-          ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
-          ws.send(JSON.stringify({ type: "refresh" }));
-        } catch {}
-
-        // Setup application heartbeat (every 15s)
-        clearInterval(heartbeatTimer);
-        heartbeatTimer = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "ping" }));
-            // If connection hasn't received anything in 45s, force reconnect
-            if (Date.now() - lastMessageTime > 45000) {
-              console.warn("[ws] Heartbeat timeout, reconnecting...");
-              ws.close();
-            }
-          }
-        }, 15000);
-      };
-
-      ws.onmessage = (event) => {
-        lastMessageTime = Date.now();
-        try {
-          const msg = JSON.parse(event.data);
-          if (msg.type === "output") {
-            term.write(msg.data);
-          } else if (msg.type === "pong") {
-            // Heartbeat ACK
-          } else if (msg.type === "exit") {
-            const exitCode = typeof msg.code === "number" ? msg.code : 0;
-            term.writeln(`\r\n\x1b[90m[Process completed with exit code ${exitCode}]\x1b[0m`);
-            shouldReconnect = false;
-            updateStatus("disconnected");
-            onProcessExitRef.current?.(tabId, exitCode);
-          }
-        } catch {
-          // Plain string fallback
-          term.write(event.data);
-        }
-      };
-
-      ws.onclose = (event) => {
-        clearInterval(heartbeatTimer);
-        if (isDisposed) return;
-
-        // If not intentional client close (code 1000) and shell did not cleanly exit
-        if (event.code !== 1000 && shouldReconnect) {
-          const delay = Math.min(1000 * 1.5 ** reconnectAttempts, 15000);
-          reconnectAttempts++;
-          reconnectTimer = setTimeout(connect, delay);
-        } else {
-          updateStatus("disconnected");
-        }
-      };
-
-      ws.onerror = () => {
-        try {
-          ws.close();
-        } catch {}
-      };
-    }
-
-    connect();
-
-    // 6. Forward user terminal input to WebSocket
-    const onDataDisposable = term.onData((data) => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: "input", data }));
-      }
-    });
-
-    // 7. Debounced window / container ResizeObserver
-    const resizeObserver = new ResizeObserver(() => {
-      if (!isActiveRef.current) return;
-      clearTimeout(resizeDebounceTimer);
-      resizeDebounceTimer = setTimeout(() => {
-        try {
-          fitAddon.fit();
-          if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(
-              JSON.stringify({
-                type: "resize",
-                cols: term.cols,
-                rows: term.rows,
-              }),
-            );
-          }
-        } catch {}
-      }, 80);
-    });
-
-    resizeObserver.observe(containerRef.current);
-
-    // Touch-drag scrolling fallback for xterm.js 6.0.0 (SmoothScrollableElement omits touch gestures)
-    const containerEl = containerRef.current;
-    let touchActive = false;
-    let isTouchScrolling = false;
-    let touchStartY = 0;
-    let touchLastY = 0;
-    let touchAccumulatedY = 0;
-
-    const handleTouchStart = (e: TouchEvent) => {
-      if (e.touches.length !== 1) {
-        touchActive = false;
-        isTouchScrolling = false;
-        return;
-      }
-      const target = e.target as HTMLElement | null;
-      if (target?.closest(".scrollbar")) {
-        touchActive = false;
-        return;
-      }
-      touchActive = true;
-      isTouchScrolling = false;
-      touchStartY = e.touches[0].clientY;
-      touchLastY = touchStartY;
-      touchAccumulatedY = 0;
-    };
-
-    const handleTouchMove = (e: TouchEvent) => {
-      if (!touchActive || e.touches.length !== 1) {
-        touchActive = false;
-        isTouchScrolling = false;
-        return;
-      }
-      const currentY = e.touches[0].clientY;
-      if (!isTouchScrolling) {
-        if (Math.abs(currentY - touchStartY) < 6) return;
-        isTouchScrolling = true;
-      }
-      const deltaY = touchLastY - currentY;
-      touchLastY = currentY;
-      const pxPerLine = (term.options.fontSize ?? 15) * (term.options.lineHeight ?? 1.2) || 18;
-      touchAccumulatedY += deltaY;
-      const lines = Math.trunc(touchAccumulatedY / pxPerLine);
-      if (lines !== 0) {
-        term.scrollLines(lines);
-        touchAccumulatedY -= lines * pxPerLine;
-      }
-      if (e.cancelable) {
-        e.preventDefault();
-      }
-    };
-
-    const handleTouchEnd = () => {
-      touchActive = false;
-      isTouchScrolling = false;
-      touchAccumulatedY = 0;
-    };
-
-    containerEl.addEventListener("touchstart", handleTouchStart, { passive: true });
-    containerEl.addEventListener("touchmove", handleTouchMove, { passive: false });
-    containerEl.addEventListener("touchend", handleTouchEnd, { passive: true });
-    containerEl.addEventListener("touchcancel", handleTouchEnd, { passive: true });
-
-    // Initial fit
-    setTimeout(() => {
-      try {
-        fitAddon.fit();
-        term.focus();
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-          wsRef.current.send(
-            JSON.stringify({
-              type: "resize",
-              cols: term.cols,
-              rows: term.rows,
-            }),
-          );
-        }
-      } catch {}
-    }, 100);
-    return () => {
-      isDisposed = true;
-      clearTimeout(reconnectTimer);
-      clearInterval(heartbeatTimer);
-      clearTimeout(resizeDebounceTimer);
-      containerEl.removeEventListener("touchstart", handleTouchStart);
-      containerEl.removeEventListener("touchmove", handleTouchMove);
-      containerEl.removeEventListener("touchend", handleTouchEnd);
-      containerEl.removeEventListener("touchcancel", handleTouchEnd);
-      resizeObserver.disconnect();
-      onDataDisposable.dispose();
-      try {
-        wsRef.current?.close(1000, "Tab unmounted");
-      } catch {}
-      try {
-        term.dispose();
-      } catch {}
-      termRef.current = null;
-      fitAddonRef.current = null;
-    };
-  }, [tabId]);
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: drag-and-drop file upload container
