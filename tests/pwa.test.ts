@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
@@ -51,15 +52,33 @@ describe("PWA Specification & Assets", () => {
     const content = readFileSync(swPath, "utf-8");
     expect(content).toContain("new Serwist");
     expect(content).toContain("self.__SW_MANIFEST");
+    expect(content).toContain("skipWaiting: false");
     expect(content).toContain('navigateFallback: "/index.html"');
+    expect(content).toContain(
+      "navigateFallbackDenylist: [/^\\/api\\//, /^\\/ws\\//, /^\\/auth\\//]",
+    );
   });
 
-  it("build produces sw.js and manifest in build/client", () => {
+  it("build produces sw.js and manifest in build/client with content-hashed /index.html revision", () => {
     const swDest = join(rootDir, "build", "client", "sw.js");
+    const indexDest = join(rootDir, "build", "client", "index.html");
     const manifestDest = join(rootDir, "build", "client", "manifest.webmanifest");
     expect(existsSync(swDest)).toBe(true);
     expect(statSync(swDest).size).toBeGreaterThan(0);
+    expect(existsSync(indexDest)).toBe(true);
     expect(existsSync(manifestDest)).toBe(true);
     expect(statSync(manifestDest).size).toBeGreaterThan(0);
+
+    const swContent = readFileSync(swDest, "utf-8");
+    expect(swContent).not.toContain('revision: "1.0.0"');
+    expect(swContent).not.toContain("__KNIFE_INDEX_HTML_REVISION__");
+
+    const expectedRevision = createHash("sha256")
+      .update(readFileSync(indexDest))
+      .digest("hex")
+      .slice(0, 16);
+    const match = swContent.match(/revision:\s*"([a-f0-9]+)",\s*url:\s*"\/index\.html"/);
+    expect(match).not.toBeNull();
+    expect(match?.[1]).toBe(expectedRevision);
   });
 });
