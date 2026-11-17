@@ -2,15 +2,9 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import { join } from "node:path";
-import {
-  createZipStream,
-  getDefaultHome,
-  isProtectedPath,
-  listDirectory,
-  normalizePath,
-  resolveDownloadHeaders,
-  statItem,
-} from "../server/fs";
+import { listDirectory, resolveDownloadHeaders, statItem } from "../server/features/fs/list";
+import { getDefaultHome, isProtectedPath, normalizePath } from "../server/features/fs/paths";
+import { createZipStream } from "../server/features/fs/zip";
 
 const TEST_DIR = join(os.tmpdir(), "knife-fs-test-" + Math.random().toString(36).slice(2));
 

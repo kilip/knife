@@ -9,7 +9,7 @@ import {
   getCurrentVersion,
   type PackageManagerInfo,
   parseSemver,
-} from "../server/update";
+} from "../server/features/update/update";
 
 describe("Semver parsing and comparison", () => {
   it("parses valid standard semver strings", () => {

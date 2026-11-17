@@ -1,4 +1,6 @@
-import type { KnifeConfig } from "./config";
+import { type KnifeConfig, parseCliArgs } from "./config";
+import { handleServiceCommand } from "./service";
+import { getServiceManager } from "./service/factory";
 
 /**
  * Prints the Knife CLI usage help message.
@@ -69,4 +71,76 @@ export function printStartupBanner(config: KnifeConfig, origin: string): void {
   console.log(`Allowed User:       ${config.auth?.allowedUsername}`);
   console.log(`GitHub Callback:    ${origin}/auth/github/callback`);
   console.log(`${"=".repeat(64)}\n`);
+}
+
+export async function handleOnboardingCommand(
+  cliArgs: ReturnType<typeof parseCliArgs>,
+  config: KnifeConfig,
+  isFirstRun: boolean,
+): Promise<void> {
+  if (!isFirstRun) {
+    console.log(`Knife is already configured (allowed user: ${config.auth?.allowedUsername}).`);
+    console.log("Setup mode is only available before initial configuration.");
+    process.exit(0);
+  }
+  if (!cliArgs.configPath) {
+    try {
+      const status = await getServiceManager(process.platform).status({
+        action: "status",
+        name: "knife",
+        system: false,
+        env: {},
+        help: false,
+      });
+      if (
+        status.active &&
+        status.setupUrl &&
+        (!cliArgs.port || status.setupUrl.includes(`:${cliArgs.port}/`))
+      ) {
+        printRunningServiceSetupBanner(status.setupUrl);
+        process.exit(0);
+      }
+    } catch {
+      // Service manager unavailable; fall through to start setup mode locally
+    }
+  }
+}
+
+export function handleServerBindError(err: unknown, config: KnifeConfig): never {
+  const errorObj = err as { code?: string; message?: string };
+  if (errorObj?.code === "EADDRINUSE" || errorObj?.message?.includes("address already in use")) {
+    console.error("\n=======================================================");
+    console.error(`FATAL: Port ${config.port} is already in use on ${config.host}.`);
+    console.error("Please stop the existing process or choose a different port using:");
+    console.error("  --port <number> or KNIFE_PORT=<number>");
+    console.error("=======================================================\n");
+  } else {
+    console.error("Failed to start Knife server:", err);
+  }
+  process.exit(1);
+}
+
+export async function parseCliOrExit(argv: string[]) {
+  try {
+    if (await handleServiceCommand(argv)) {
+      process.exit(0);
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`\x1b[31mError:\x1b[0m ${msg}`);
+    process.exit(1);
+  }
+  const cliArgs = parseCliArgs(argv);
+  if (cliArgs.help) {
+    printCliHelp();
+    process.exit(0);
+  }
+  if (cliArgs.unknown?.length) {
+    console.error(
+      `\x1b[31mError:\x1b[0m Unknown command or argument: ${cliArgs.unknown.join(" ")}`,
+    );
+    console.error("Run 'knife --help' for usage.");
+    process.exit(1);
+  }
+  return cliArgs;
 }

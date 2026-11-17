@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getTabsPath, loadTabs, saveTabs, type TabData } from "../server/storage";
+import { getTabsPath, loadTabs, saveTabs, type TabData } from "../server/features/tabs/store";
 
 describe("Atomic Tabs Storage", () => {
   const rootTempDir = mkdtempSync(join(tmpdir(), "knife-storage-suite-"));

@@ -7,7 +7,7 @@ import {
   getSettingsPath,
   loadSettings,
   saveSettings,
-} from "../server/storage";
+} from "../server/features/tabs/store";
 
 describe("User Settings Storage", () => {
   let tempDir: string;

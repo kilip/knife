@@ -1,4 +1,8 @@
-import type { ServerWebSocket } from "bun";
+import type { Server, ServerWebSocket } from "bun";
+import { getSessionFromCookie } from "../../auth";
+import type { KnifeConfig } from "../../config";
+import { formatRequestLog, shouldLogRequest } from "../../middleware/request-log";
+import { getClientIp } from "../../proxy";
 import { PtySession } from "./pty";
 
 export interface WsClientData {
@@ -283,4 +287,42 @@ export function isAllowedRequestOrigin(
   }
 
   return isAllowedOrigin(headers.get("origin"), publicDomain, host, port);
+}
+
+export function handleTerminalUpgrade(
+  req: Request,
+  server: Server<WsClientData>,
+  config: KnifeConfig,
+): Response | undefined {
+  const url = new URL(req.url);
+  const directIp = server.requestIP(req)?.address || "127.0.0.1";
+  const clientIp = getClientIp(directIp, req.headers, config.trustedProxies);
+  if (shouldLogRequest(url.pathname)) {
+    console.log(formatRequestLog(req.method, url.pathname, clientIp));
+  }
+  if (!isAllowedRequestOrigin(req.headers, config.publicDomain, config.host, config.port)) {
+    console.warn(
+      `[ws] Forbidden: Origin '${req.headers.get("origin")}' not allowed for client IP ${clientIp}`,
+    );
+    return new Response("Forbidden origin", { status: 403 });
+  }
+  const session = getSessionFromCookie(req.headers.get("cookie"), config.sessionSecret);
+  if (!session?.username) {
+    console.warn(`[ws] Unauthorized WebSocket attempt from ${clientIp}`);
+    return new Response("Unauthorized", { status: 401 });
+  }
+  const tabId = url.searchParams.get("tabId") || url.pathname.split("/").pop();
+  if (!tabId) {
+    return new Response("Missing tabId", { status: 400 });
+  }
+  const cols = parseInt(url.searchParams.get("cols") || "0", 10) || 80;
+  const rows = parseInt(url.searchParams.get("rows") || "0", 10) || 24;
+  if (
+    server.upgrade(req, {
+      data: { tabId, username: session.username, cols, rows, lastPingTime: Date.now() },
+    })
+  ) {
+    return undefined;
+  }
+  return new Response("WebSocket upgrade failed", { status: 400 });
 }

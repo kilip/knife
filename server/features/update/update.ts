@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { getServiceManager } from "./service/factory";
-import type { ServiceCliOptions } from "./service/types";
+import { getServiceManager } from "../../service/factory";
+import type { ServiceCliOptions } from "../../service/types";
 
 export interface VersionParts {
   major: number;

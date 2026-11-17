@@ -15,9 +15,13 @@ import {
   verifySetupToken,
 } from "./auth";
 import type { KnifeConfig } from "./config";
+import { createFsRoutes } from "./features/fs/routes";
 import { serveStaticFile } from "./features/static/serve";
+import { createTabsRoutes } from "./features/tabs/routes";
+import { loadSettings, saveSettings, type TabData } from "./features/tabs/store";
 import { getShellName, getUserShell } from "./features/terminal/shell";
 import { isAllowedRequestOrigin } from "./features/terminal/ws";
+import { createUpdateRoutes } from "./features/update/routes";
 import { formatRequestLog, shouldLogRequest } from "./middleware/request-log";
 import { getSecurityHeaders } from "./middleware/security-headers";
 import { getClientIp } from "./proxy";
@@ -37,11 +41,9 @@ export interface AppDeps {
   getIsFirstRun: () => boolean;
   setIsFirstRun: (value: boolean) => void;
   saveConfig: (config: KnifeConfig) => void;
-  legacyHandler?: (
-    req: Request,
-    clientIp: string,
-    secHeaders: Headers,
-  ) => Promise<Response | undefined> | Response | undefined;
+  getTabs?: () => TabData[];
+  setTabs?: (tabs: TabData[]) => void;
+  persistTabs?: (tabs: TabData[]) => void;
 }
 
 function requireJsonContentType(req: Request, headers: HeadersInit): Response | null {
@@ -328,21 +330,68 @@ export function createApp(deps: AppDeps) {
     return c.json({ theme: cfg.theme });
   });
 
-  // Legacy unmigrated routes + static assets + SPA fallback
+  // Feature routes: tabs, fs, settings, update
+  let fallbackTabs: TabData[] = [];
+  const getTabs = deps.getTabs ?? (() => fallbackTabs);
+  const setTabs =
+    deps.setTabs ??
+    ((tabs: TabData[]) => {
+      fallbackTabs = tabs;
+    });
+
+  app.route(
+    "/api/tabs",
+    createTabsRoutes({
+      getConfig: deps.getConfig,
+      getTabs,
+      setTabs,
+      persistTabs: deps.persistTabs,
+    }),
+  );
+
+  app.route("/api/fs", createFsRoutes({ getConfig: deps.getConfig }));
+
+  app.all("/api/settings", async (c) => {
+    const cfg = deps.getConfig();
+    const secHeaders = getSecurityHeaders(cfg);
+    const currentSession = getSessionFromCookie(c.req.header("cookie") ?? null, cfg.sessionSecret);
+    if (!currentSession) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+    if (c.req.method === "GET") {
+      return c.json(loadSettings(cfg.theme));
+    }
+    if (c.req.method === "PATCH") {
+      const contentTypeErr = requireJsonContentType(c.req.raw, secHeaders);
+      if (contentTypeErr) return contentTypeErr;
+      const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+      if (typeof body !== "object" || body === null || Array.isArray(body)) {
+        return c.json({ error: "Invalid JSON body" }, 400);
+      }
+      if (typeof body.theme === "string" && body.theme.length > 0) {
+        cfg.theme = body.theme;
+        deps.saveConfig(cfg);
+      }
+      return c.json(saveSettings(body, cfg.theme));
+    }
+    return c.text("Method Not Allowed", 405);
+  });
+
+  app.route(
+    "/api/system/update",
+    createUpdateRoutes({
+      getConfig: deps.getConfig,
+      getTabsCount: () => getTabs().length,
+    }),
+  );
+
+  // Static assets + SPA fallback
   app.all("*", async (c) => {
     const cfg = deps.getConfig();
     const secHeaders = getSecurityHeaders(cfg);
-    const clientIp = c.get("clientIp");
+    const reqPath = c.req.path;
 
-    if (deps.legacyHandler) {
-      const legacyResponse = await deps.legacyHandler(c.req.raw, clientIp, secHeaders);
-      if (legacyResponse) {
-        return legacyResponse;
-      }
-    }
-
-    const url = new URL(c.req.url);
-    const staticFile = serveStaticFile(url.pathname, undefined, secHeaders);
+    const staticFile = serveStaticFile(reqPath, undefined, secHeaders);
     if (staticFile) {
       return staticFile;
     }
@@ -350,17 +399,17 @@ export function createApp(deps: AppDeps) {
     const currentSession = getSessionFromCookie(c.req.header("cookie") ?? null, cfg.sessionSecret);
 
     if (deps.getIsFirstRun()) {
-      if (!url.pathname.startsWith("/setup")) {
+      if (!reqPath.startsWith("/setup")) {
         return c.redirect("/setup", 302);
       }
     } else {
-      if (url.pathname === "/setup") {
+      if (reqPath === "/setup") {
         return c.redirect("/", 302);
       }
-      if (!currentSession && url.pathname !== "/login") {
+      if (!currentSession && reqPath !== "/login") {
         return c.redirect("/login", 302);
       }
-      if (currentSession && url.pathname === "/login") {
+      if (currentSession && reqPath === "/login") {
         return c.redirect("/", 302);
       }
     }

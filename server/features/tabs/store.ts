@@ -7,7 +7,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { resolveConfigPath } from "./config";
+import { resolveConfigPath } from "../../config";
+import { getShellName } from "../terminal/shell";
 
 export interface TabData {
   id: string;
@@ -146,6 +147,25 @@ export function saveTabs(tabs: TabData[]): void {
       // Ignore cleanup error if temp file was never created or already moved
     }
     throw err;
+  }
+}
+
+export function initTabs(): TabData[] {
+  try {
+    const tabs = loadTabs();
+    if (tabs.length === 0 && !existsSync(getTabsPath())) {
+      tabs.push({
+        id: crypto.randomUUID().slice(0, 8),
+        name: `${getShellName()} 1`,
+        order: 0,
+        createdAt: Date.now(),
+      });
+      saveTabs(tabs);
+    }
+    return tabs;
+  } catch (err) {
+    console.error("[server] Failed to initialize tabs:", err);
+    return [];
   }
 }
 
