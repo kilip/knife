@@ -32,6 +32,7 @@
     "test": "bun test",
     "lint": "biome lint",
     "format": "biome format --write",
+    "check": "biome ci .",
     "prepare": "husky"
   },
   "dependencies": {

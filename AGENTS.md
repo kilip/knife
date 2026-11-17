@@ -16,10 +16,11 @@ bun run dev         # server in watch mode
 bun run build       # react-router build -> build/client
 bun run typecheck   # react-router typegen && tsc --noEmit
 bun run format      # biome format --write
+bun run check       # biome ci . (lint + format + import sorting)
 bun test            # bun:test, all of tests/
 ```
 
-CI runs `bun install --frozen-lockfile` -> `typecheck` -> `build` -> `test`. All must pass locally before finishing.
+CI runs `bun install --frozen-lockfile` -> `check` -> `typecheck` -> `build` -> `test`. All must pass locally before finishing.
 
 ## Architecture notes
 
