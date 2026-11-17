@@ -2,7 +2,6 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import { dirname, join } from "node:path";
 import { defaultRunner } from "../runner";
-import { renderSystemdUnit } from "../templates";
 import type {
   CommandRunner,
   ResolvedServiceContext,
@@ -11,6 +10,59 @@ import type {
   ServiceManager,
   ServiceStatusResult,
 } from "../types";
+
+/**
+ * Escapes an argument for systemd ExecStart syntax.
+ * Values with spaces, quotes, or special characters are wrapped in double quotes.
+ */
+export function escapeSystemdArg(arg: string): string {
+  if (/[\s"'\\]/.test(arg)) {
+    const escaped = arg.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    return `"${escaped}"`;
+  }
+  return arg;
+}
+
+/**
+ * Generates a systemd unit file content (.service).
+ */
+export function renderSystemdUnit(ctx: ResolvedServiceContext): string {
+  const wantedBy = ctx.system ? "multi-user.target" : "default.target";
+  const execArgs = [ctx.bunPath, "run", ctx.entrypointPath, ...ctx.cliArgs]
+    .map(escapeSystemdArg)
+    .join(" ");
+
+  const envLines = Object.entries(ctx.env)
+    .map(([key, value]) => {
+      const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      return `Environment="${key}=${escaped}"`;
+    })
+    .join("\n");
+
+  return `[Unit]
+Description=Knife - Web Terminal & File Browser (${ctx.name})
+Documentation=https://github.com/kilip/knife
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=${escapeSystemdArg(ctx.workingDir)}
+ExecStart=${execArgs}
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictRealtime=true
+LockPersonality=true
+${envLines}
+
+[Install]
+WantedBy=${wantedBy}
+`;
+}
 
 export class SystemdServiceManager implements ServiceManager {
   readonly platform = "linux";

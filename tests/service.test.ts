@@ -238,6 +238,13 @@ describe("Template Generators", () => {
     expect(unit).toContain("ExecStart=");
     expect(unit).toContain("/home/user/.bun/bin/bun run /home/user/code/knife/server/index.ts");
     expect(unit).toContain('Environment="KNIFE_CONFIG_PATH=/home/user/code/knife/config.json"');
+    expect(unit).toContain("NoNewPrivileges=true");
+    expect(unit).toContain("PrivateTmp=true");
+    expect(unit).toContain("ProtectControlGroups=true");
+    expect(unit).toContain("ProtectKernelModules=true");
+    expect(unit).toContain("ProtectKernelTunables=true");
+    expect(unit).toContain("RestrictRealtime=true");
+    expect(unit).toContain("LockPersonality=true");
     expect(unit).toContain("WantedBy=default.target");
   });
 
