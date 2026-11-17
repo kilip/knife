@@ -47,7 +47,19 @@ import {
   isManagedService,
   triggerRestart,
 } from "./update";
-import { closeActivePty, getActivePty, isAllowedOrigin, websocketHandler } from "./ws";
+import { closeActivePty, getActivePty, isAllowedRequestOrigin, websocketHandler } from "./ws";
+
+function requireJsonContentType(req: Request, headers: HeadersInit): Response | null {
+  const contentType = req.headers.get("content-type");
+  const mediaType = contentType?.split(";")[0]?.trim().toLowerCase();
+  if (mediaType !== "application/json") {
+    return Response.json(
+      { error: "Content-Type must be application/json" },
+      { status: 415, headers },
+    );
+  }
+  return null;
+}
 
 // Handle background service commands (install, uninstall, start, stop, status, restart)
 try {
@@ -228,7 +240,7 @@ try {
       // 1. WebSocket Upgrade Handler
       if (url.pathname === "/ws/terminal" || url.pathname.startsWith("/ws/terminal/")) {
         const originHeader = req.headers.get("origin");
-        if (!isAllowedOrigin(originHeader, config.publicDomain, config.host, config.port)) {
+        if (!isAllowedRequestOrigin(req.headers, config.publicDomain, config.host, config.port)) {
           console.warn(
             `[ws] Forbidden: Origin '${originHeader}' not allowed for client IP ${clientIp}`,
           );
@@ -306,11 +318,29 @@ try {
         );
       }
 
+      // Enforce Origin / Sec-Fetch-Site on all non-GET /api/* requests
+      if (
+        url.pathname.startsWith("/api/") &&
+        req.method !== "GET" &&
+        req.method !== "HEAD" &&
+        req.method !== "OPTIONS"
+      ) {
+        if (!isAllowedRequestOrigin(req.headers, config.publicDomain, config.host, config.port)) {
+          console.warn(
+            `[api] Forbidden origin '${req.headers.get("origin")}' (Sec-Fetch-Site: '${req.headers.get("sec-fetch-site")}') for ${req.method} ${url.pathname} from ${clientIp}`,
+          );
+          return Response.json({ error: "Forbidden origin" }, { status: 403, headers: secHeaders });
+        }
+      }
+
       // 4. First run setup API
       if (url.pathname === "/api/setup") {
         if (req.method !== "POST") {
           return new Response("Method Not Allowed", { status: 405, headers: secHeaders });
         }
+
+        const contentTypeErr = requireJsonContentType(req, secHeaders);
+        if (contentTypeErr) return contentTypeErr;
 
         try {
           const body = (await req.json()) as {
@@ -552,6 +582,8 @@ try {
 
         // POST /api/tabs (Create tab)
         if (url.pathname === "/api/tabs" && req.method === "POST") {
+          const contentTypeErr = requireJsonContentType(req, secHeaders);
+          if (contentTypeErr) return contentTypeErr;
           const body = (await req.json().catch(() => ({}))) as {
             name?: string;
             cols?: number;
@@ -578,6 +610,8 @@ try {
 
         // POST /api/tabs/reorder
         if (url.pathname === "/api/tabs/reorder" && req.method === "POST") {
+          const contentTypeErr = requireJsonContentType(req, secHeaders);
+          if (contentTypeErr) return contentTypeErr;
           const body = (await req.json().catch(() => ({}))) as { tabIds?: string[] };
           if (Array.isArray(body.tabIds)) {
             const idMap = new Map(currentTabs.map((t) => [t.id, t]));
@@ -630,6 +664,8 @@ try {
 
         // Rename tab
         if (req.method === "PATCH") {
+          const contentTypeErr = requireJsonContentType(req, secHeaders);
+          if (contentTypeErr) return contentTypeErr;
           const body = (await req.json().catch(() => ({}))) as { name?: string };
           if (body.name && typeof body.name === "string") {
             currentTabs[tabIndex].name = body.name.trim();
@@ -735,6 +771,8 @@ try {
 
         // POST /api/fs/archive
         if (url.pathname === "/api/fs/archive" && req.method === "POST") {
+          const contentTypeErr = requireJsonContentType(req, secHeaders);
+          if (contentTypeErr) return contentTypeErr;
           try {
             const body = (await req.json().catch(() => ({}))) as { paths?: string[] };
             if (!body.paths || !Array.isArray(body.paths) || body.paths.length === 0) {
@@ -823,6 +861,8 @@ try {
 
         // POST /api/fs/action
         if (url.pathname === "/api/fs/action" && req.method === "POST") {
+          const contentTypeErr = requireJsonContentType(req, secHeaders);
+          if (contentTypeErr) return contentTypeErr;
           try {
             const body = (await req.json().catch(() => ({}))) as {
               action?: string;
@@ -969,6 +1009,8 @@ try {
           if (!currentSession) {
             return Response.json({ error: "Unauthorized" }, { status: 401, headers: secHeaders });
           }
+          const contentTypeErr = requireJsonContentType(req, secHeaders);
+          if (contentTypeErr) return contentTypeErr;
           const body = (await req.json().catch(() => ({}))) as { theme?: unknown };
           if (typeof body?.theme !== "string" || !THEME_MAP.has(body.theme)) {
             return Response.json({ error: "Invalid theme" }, { status: 400, headers: secHeaders });
@@ -990,6 +1032,8 @@ try {
           return Response.json(settings, { headers: secHeaders });
         }
         if (req.method === "PATCH") {
+          const contentTypeErr = requireJsonContentType(req, secHeaders);
+          if (contentTypeErr) return contentTypeErr;
           const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
           if (typeof body !== "object" || body === null || Array.isArray(body)) {
             return Response.json(

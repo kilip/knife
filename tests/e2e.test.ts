@@ -643,6 +643,86 @@ describe("Knife End-to-End System Tests", () => {
     expect(meAfter.status).toBe(401);
   });
 
+  it("enforces exact Origin/Sec-Fetch-Site and JSON Content-Type on API and WS", async () => {
+    const sessionToken = createSessionToken("testowner", "test-secret-key-e2e");
+    const cookieHeader = `knife_session=${sessionToken}`;
+
+    // 1. Cross-origin POST returns 403
+    const crossOriginRes = await fetch(`http://127.0.0.1:${testPort}/api/theme`, {
+      method: "POST",
+      headers: {
+        Cookie: cookieHeader,
+        Origin: "https://evil.example.com",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ theme: "nord" }),
+    });
+    expect(crossOriginRes.status).toBe(403);
+
+    // 2. Wrong-port loopback POST returns 403
+    const wrongPortRes = await fetch(`http://127.0.0.1:${testPort}/api/theme`, {
+      method: "POST",
+      headers: {
+        Cookie: cookieHeader,
+        Origin: "http://localhost:9999",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ theme: "nord" }),
+    });
+    expect(wrongPortRes.status).toBe(403);
+
+    // 3. Sec-Fetch-Site: cross-site POST returns 403
+    const secFetchRes = await fetch(`http://127.0.0.1:${testPort}/api/theme`, {
+      method: "POST",
+      headers: {
+        Cookie: cookieHeader,
+        Origin: `http://127.0.0.1:${testPort}`,
+        "Sec-Fetch-Site": "cross-site",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ theme: "nord" }),
+    });
+    expect(secFetchRes.status).toBe(403);
+
+    // 4. Wrong-port loopback WS upgrade returns 403
+    const wsWrongPort = await fetch(`http://127.0.0.1:${testPort}/ws/terminal?tabId=tab-1`, {
+      headers: {
+        Cookie: cookieHeader,
+        Upgrade: "websocket",
+        Connection: "Upgrade",
+        "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+        "Sec-WebSocket-Version": "13",
+        Origin: "http://localhost:9999",
+      },
+    });
+    expect(wsWrongPort.status).toBe(403);
+
+    // 5. Non-JSON POST returns 415
+    const nonJsonRes = await fetch(`http://127.0.0.1:${testPort}/api/theme`, {
+      method: "POST",
+      headers: {
+        Cookie: cookieHeader,
+        Origin: `http://127.0.0.1:${testPort}`,
+        "Content-Type": "text/plain",
+      },
+      body: JSON.stringify({ theme: "nord" }),
+    });
+    expect(nonJsonRes.status).toBe(415);
+
+    // 6. application/json; charset=utf-8 is accepted
+    const charsetJsonRes = await fetch(`http://127.0.0.1:${testPort}/api/theme`, {
+      method: "POST",
+      headers: {
+        Cookie: cookieHeader,
+        Origin: `http://127.0.0.1:${testPort}`,
+        "Sec-Fetch-Site": "same-origin",
+        "Content-Type": "application/json; charset=utf-8",
+      },
+      body: JSON.stringify({ theme: "nord" }),
+    });
+    expect(charsetJsonRes.status).toBe(200);
+  });
+
   it("allows deleting all tabs down to zero tabs without auto-creating a new tab", async () => {
     const sessionToken = createSessionToken("testowner", "test-secret-key-e2e");
     const cookieHeader = `knife_session=${sessionToken}`;

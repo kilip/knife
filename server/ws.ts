@@ -204,8 +204,15 @@ export const websocketHandler = {
   },
 };
 
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
+const WILDCARD_HOSTS = new Set(["0.0.0.0", "::"]);
+
+function stripIpv6Brackets(hostname: string): string {
+  return hostname.startsWith("[") && hostname.endsWith("]") ? hostname.slice(1, -1) : hostname;
+}
+
 /**
- * Validates WebSocket origin against configured public domain and scheme
+ * Validates WebSocket/HTTP origin against configured listening host:port and public domain
  */
 export function isAllowedOrigin(
   originHeader: string | null,
@@ -216,20 +223,26 @@ export function isAllowedOrigin(
   if (!originHeader) return true; // Direct non-browser clients
   try {
     const originUrl = new URL(originHeader);
-    const originHost = originUrl.hostname;
+    const originHost = stripIpv6Brackets(originUrl.hostname.toLowerCase());
     const originPort = originUrl.port
       ? parseInt(originUrl.port, 10)
       : originUrl.protocol === "https:"
         ? 443
         : 80;
 
-    // Allow localhost / loopback access
-    if (originHost === "localhost" || originHost === "127.0.0.1" || originHost === "::1") {
+    const normalizedHost = stripIpv6Brackets(host.toLowerCase());
+
+    // Exact match against configured listening host and port
+    if (originHost === normalizedHost && originPort === port) {
       return true;
     }
 
-    // Allow configured server host
-    if (originHost === host && originPort === port) {
+    // Allow loopback hostname aliases only on the exact listening port
+    if (
+      originPort === port &&
+      LOOPBACK_HOSTS.has(originHost) &&
+      (LOOPBACK_HOSTS.has(normalizedHost) || WILDCARD_HOSTS.has(normalizedHost))
+    ) {
       return true;
     }
 
@@ -238,12 +251,13 @@ export function isAllowedOrigin(
       const publicUrl = new URL(
         publicDomain.startsWith("http") ? publicDomain : `https://${publicDomain}`,
       );
+      const publicHost = stripIpv6Brackets(publicUrl.hostname.toLowerCase());
       const publicPort = publicUrl.port
         ? parseInt(publicUrl.port, 10)
         : publicUrl.protocol === "https:"
           ? 443
           : 80;
-      if (originHost === publicUrl.hostname && originPort === publicPort) {
+      if (originHost === publicHost && originPort === publicPort) {
         return true;
       }
     }
@@ -252,4 +266,24 @@ export function isAllowedOrigin(
   } catch {
     return false;
   }
+}
+
+/**
+ * Validates both Sec-Fetch-Site and Origin headers for state-changing HTTP and WS requests
+ */
+export function isAllowedRequestOrigin(
+  headers: Headers,
+  publicDomain: string,
+  host: string,
+  port: number,
+): boolean {
+  const secFetchSite = headers.get("sec-fetch-site");
+  if (secFetchSite !== null) {
+    const normalized = secFetchSite.trim().toLowerCase();
+    if (normalized !== "same-origin" && normalized !== "none") {
+      return false;
+    }
+  }
+
+  return isAllowedOrigin(headers.get("origin"), publicDomain, host, port);
 }

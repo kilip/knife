@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { getClientIp, isIpTrusted, isValidIpv4, isValidIpv6 } from "../server/proxy";
+import { isAllowedOrigin, isAllowedRequestOrigin } from "../server/ws";
 
 describe("Proxy & IP Verification", () => {
   it("validates IPv4 addresses accurately", () => {
@@ -50,5 +51,38 @@ describe("Proxy & IP Verification", () => {
     // Case 2: Direct peer is untrusted (198.51.100.5) -> ignore XFF!
     const clientIpFromUntrusted = getClientIp("198.51.100.5", headers, trusted);
     expect(clientIpFromUntrusted).toBe("198.51.100.5");
+  });
+
+  it("enforces exact Origin and Sec-Fetch-Site without loopback wildcard", () => {
+    // Exact listening host:port and loopback alias on same port allowed
+    expect(isAllowedOrigin("http://127.0.0.1:3000", "", "127.0.0.1", 3000)).toBe(true);
+    expect(isAllowedOrigin("http://localhost:3000", "", "127.0.0.1", 3000)).toBe(true);
+
+    // Wrong-port loopback must be rejected
+    expect(isAllowedOrigin("http://localhost:9999", "", "127.0.0.1", 3000)).toBe(false);
+    expect(isAllowedOrigin("http://127.0.0.1:9999", "", "127.0.0.1", 3000)).toBe(false);
+    expect(isAllowedOrigin("http://[::1]:9999", "", "127.0.0.1", 3000)).toBe(false);
+
+    // Cross-origin and wrong-port publicDomain rejected
+    expect(isAllowedOrigin("https://evil.com", "knife.example.com", "127.0.0.1", 3000)).toBe(false);
+    expect(
+      isAllowedOrigin("https://knife.example.com:8443", "knife.example.com", "127.0.0.1", 3000),
+    ).toBe(false);
+    expect(
+      isAllowedOrigin("https://knife.example.com", "knife.example.com", "127.0.0.1", 3000),
+    ).toBe(true);
+
+    // Sec-Fetch-Site enforcement
+    const crossSiteHeaders = new Headers({
+      Origin: "http://127.0.0.1:3000",
+      "Sec-Fetch-Site": "cross-site",
+    });
+    expect(isAllowedRequestOrigin(crossSiteHeaders, "", "127.0.0.1", 3000)).toBe(false);
+
+    const sameOriginHeaders = new Headers({
+      Origin: "http://127.0.0.1:3000",
+      "Sec-Fetch-Site": "same-origin",
+    });
+    expect(isAllowedRequestOrigin(sameOriginHeaders, "", "127.0.0.1", 3000)).toBe(true);
   });
 });
