@@ -4,21 +4,21 @@ A single-user self-hosted web terminal with multi-tab support, PWA, and integrat
 
 ---
 
-## Highlights
+## ✨ Features
 
 - **Native Bun PTY**: Uses Bun's native `Bun.Terminal` PTY engine spawning your login shell (`$SHELL -l`) directly — no native C++ addons, `node-pty`, or `tmux` required.
 - **Resilient WebSockets**: Disconnecting or refreshing the page keeps the PTY alive for a 60-second grace period and replays the 128 KB rolling output buffer on reconnect. Auto-reconnect with exponential backoff and application-level ping/pong heartbeats.
 - **React Router 8 + Tailwind CSS**: Clean single-page application built on React Router 8 (framework mode, `ssr: false`) with CSS-variable-driven theming.
 - **Full xterm.js feature set**: Fit, WebLinks, WebGL with Canvas/DOM fallbacks, Unicode 11, OSC 52 clipboard sync, truecolor (24-bit), and mouse reporting.
 - **5 Built-in Themes**: Catppuccin Mocha (default), Tokyo Night, Nord, Gruvbox Dark, and Dracula. One unified definition powers both Tailwind UI tokens and the 16-color terminal palette, with zero flash on initial load.
-- **Single-User Security**: GitHub OAuth 2.0 restricted to a single configured username. First-run wizard protected by a one-time console setup token.
+- **Single-User Security**: GitHub OAuth 2.0 restricted to a single configured username, automatically pinned to the account's numeric GitHub user ID (`allowedUserId`) on first login. First-run wizard protected by a one-time console setup token.
 - **Progressive Web App (PWA)**: Serwist-powered service worker with precached application shell, standalone installability, offline banner, safe-area insets, and dynamic theme-color meta synchronization.
 - **Integrated File Browser & Transfers**: Left-docked split pane on desktop and slide-over drawer on mobile. Breadcrumbs navigation, sortable flat list, hidden files toggle, inline previews for text & images (<2MB), two-way drag-and-drop (drop desktop files onto the terminal canvas to upload to active tab CWD; drag browser files to paste shell-escaped paths), live CWD synchronization, on-the-fly streaming `.zip` downloads with zero disk staging, and floating transfer queue drawer with speed and progress indicators.
 - **Quick Keys & Settings**: Toggleable touch/quick-keys bar (`Esc`, `Tab`, `Ctrl+C`, `Ctrl+V`, arrow keys), customizable terminal font/cursor/scrollback settings, and built-in self-update from the Settings page.
 
 ---
 
-## Architecture Overview
+## 🏗️ Architecture Overview
 
 ```
 Browser Client (React Router 8, xterm.js)
@@ -41,7 +41,7 @@ Knife Bun HTTP & WebSocket Server
 
 ---
 
-## Prerequisites
+## 📋 Prerequisites
 
 - **Linux** (x86_64 or aarch64; primary target)
 - **Bun** (v1.2+)
@@ -49,7 +49,7 @@ Knife Bun HTTP & WebSocket Server
 
 ---
 
-## Quick Start
+## 🚀 Quick Start
 
 ### Option A: Run via Bun or NPX (Recommended)
 
@@ -114,7 +114,7 @@ Once saved, the setup token is permanently invalidated and knife switches to sta
 
 ---
 
-## Background Service (`knife service`)
+## ⚙️ Background Service (`knife service`)
 
 Knife includes built-in background service management to run reliably across server reboots, user logouts, and crashes:
 
@@ -149,6 +149,7 @@ Both space-separated (`knife service <cmd>`) and colon-separated (`knife service
   - `-p, --port <port>`: Explicit port override.
   - `--host <ip>`: Explicit host override.
   - `-d, --domain <domain>`: Explicit public domain override.
+  - `--env <K=V>`: Extra environment variable to inject (can be repeated).
   - `--name <str>`: Custom service name (default: `knife`).
   - `--user`: Install as user-level service/agent (default).
   - `--system`: Install as a system-wide daemon (requires `sudo` / Administrator; runs as `root` without a `User=` drop — prefer `--user` unless system-wide execution is required).
@@ -160,7 +161,7 @@ Both space-separated (`knife service <cmd>`) and colon-separated (`knife service
 
 ---
 
-## Reverse Proxy Setup (Caddy)
+## 🌐 Reverse Proxy Setup (Caddy)
 
 Knife listens on plain HTTP behind a reverse proxy that terminates TLS. The public domain configured during setup governs the allowed WebSocket origins, CSP, and secure cookie attributes.
 
@@ -185,7 +186,7 @@ _Note:_ Knife trusts `X-Forwarded-*` headers only from configured proxy addresse
 
 ---
 
-## Security Model & Assumptions
+## 🔒 Security Model & Assumptions
 
 - **`--system` root execution:** Running `knife service install --system` registers a system-wide daemon that executes as `root` without a `User=` drop. Prefer the default `--user` mode unless a system-wide service is explicitly required.
 - **`isProtectedPath` scope (safety guardrail, not a security boundary):** `isProtectedPath` guards file-browser write, delete, and rename operations against accidental modification of system paths, the Knife installation root, `data/`, and `config.json`. It is a safety guardrail rather than a security boundary, since authenticated users already have interactive shell access.
@@ -193,7 +194,7 @@ _Note:_ Knife trusts `X-Forwarded-*` headers only from configured proxy addresse
 
 ---
 
-## Configuration Reference
+## 🛠️ Configuration Reference
 
 Configuration precedence:
 
@@ -208,7 +209,7 @@ CLI Flags > Environment Variables > config.json > Defaults
 - `--host <ip>`: Listen host (default: `127.0.0.1`)
 - `-p, --port <number>`: Listen port (default: `3000`)
 - `-d, --domain <domain>`: Public domain (default: `""` or `KNIFE_PUBLIC_DOMAIN`)
-- `--config <path>`: Path to `config.json` (default: `./config.json`)
+- `--config <path>`: Path to `config.json` (default: `./config.json` or `KNIFE_CONFIG_PATH`)
 - `-h, --help`: Display help
 
 ### Environment Variables
@@ -219,6 +220,7 @@ CLI Flags > Environment Variables > config.json > Defaults
 - `KNIFE_CONFIG_PATH`: Path to configuration file
 - `KNIFE_DATA_DIR`: Directory for persistent `tabs.json` and `settings.json`
 - `KNIFE_SESSION_SECRET`: Secret key used for signing session cookies
+- `KNIFE_TMUX_CONF`: Optional path to tmux config when using tmux fallback
 
 ### `config.json` Example
 
@@ -241,7 +243,7 @@ CLI Flags > Environment Variables > config.json > Defaults
 
 ---
 
-## Keyboard Shortcuts
+## ⌨️ Keyboard Shortcuts
 
 | Shortcut                                                                  | Action                                      |
 | :------------------------------------------------------------------------ | :------------------------------------------ |
@@ -256,12 +258,12 @@ CLI Flags > Environment Variables > config.json > Defaults
 | <kbd>Ctrl</kbd> / <kbd>Cmd</kbd> + <kbd>+</kbd> / <kbd>-</kbd>            | Increase / decrease terminal font size      |
 | <kbd>Ctrl</kbd> / <kbd>Cmd</kbd> + <kbd>0</kbd>                           | Reset terminal font size                    |
 | <kbd>Ctrl</kbd> + <kbd>E</kbd>                                            | Toggle file browser sidebar                 |
-| <kbd>Ctrl</kbd> + <kbd>H</kbd>                                            | Toggle hidden files in file browser         |
+| <kbd>Ctrl</kbd> / <kbd>Cmd</kbd> + <kbd>H</kbd>                           | Toggle hidden files in file browser         |
 | <kbd>Ctrl</kbd> / <kbd>Cmd</kbd> + <kbd>,</kbd>                           | Open user settings page                     |
 
 ---
 
-## Development & Testing
+## 🧪 Development & Testing
 
 ```bash
 # Run unit, integration, and E2E tests
@@ -270,7 +272,8 @@ bun test
 # Type-check TypeScript
 bun run typecheck
 
-# Lint and format with Biome
+# Lint, format, and check with Biome
+bun run check
 bun run lint
 bun run format
 
@@ -283,6 +286,6 @@ bun run dev
 
 ---
 
-## License
+## 📄 License
 
 MIT
