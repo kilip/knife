@@ -40,22 +40,22 @@ CI (`.github/workflows/ci.yml`) runs, in order: `bun install --frozen-lockfile` 
 ```
 bin/knife.js          CLI shim: runs server/index.ts under Bun, or delegates to `bun` from Node
 server/
-  index.ts            Single Bun.serve entry: CLI parsing, routing, auth gates, static files (~1000 lines)
+  index.ts            Single Bun.serve entry: CLI parsing, routing, auth gates, static files (~1100 lines)
   config.ts           CLI > env > config.json > defaults
   auth.ts             Setup token, HMAC session cookie, GitHub OAuth helpers
   proxy.ts            Trusted-proxy handling, client IP
   ws.ts               WebSocket handler, per-tab PTY registry, reconnect/replay
   pty.ts              PtySession (Bun.Terminal + login shell, 128 KB rolling buffer)
   tmux.ts / shell.ts  Optional tmux helpers, user shell detection
-  storage.ts          tabs.json persistence + data dir resolution
+  storage.ts          tabs.json & settings.json persistence + data dir resolution
   fs.ts               File browser backend, path normalization, protected paths, zip streaming
   update.ts           Self-update (version check, package manager detection, restart)
   service/            `knife service ...` (systemd / launchd / Windows managers)
 app/
-  routes.ts           index (home), /setup, /login
-  routes/             home.tsx (terminal UI), setup.tsx, login.tsx
+  routes.ts           index (home), /setup, /login, /settings
+  routes/             home.tsx (terminal UI), setup.tsx, login.tsx, settings.tsx
   components/         TerminalTab, TabBar, FileBrowser/*, QuickKeysBar, SelfUpdateModal, Pwa*
-  hooks/              useFileTransfer, useSelfUpdate, usePwa
+  hooks/              useFileTransfer, useSelfUpdate, usePwa, useSettings
   utils/themes.ts     Single source of truth for UI tokens + xterm palette
   sw.ts               Serwist service worker
 tests/                bun:test suites (unit + e2e)
@@ -66,7 +66,7 @@ public/               PWA manifest and icons
 
 - **Single process serves everything:** static SPA from `build/client`, `/api/*`, `/auth/*`, and the `/ws/terminal` WebSocket. Routing is hand-written `url.pathname` matching in `server/index.ts`. There is no Express/Hono.
 - **Terminal sessions:** each tab = a `TabData` (`id`, `name`, `sessionName = knife-<id>`, `order`, `createdAt`) persisted in `<dataDir>/tabs.json`. `ws.ts` keeps live `PtySession`s in an in-memory map keyed by `tabId`. A disconnect starts a grace timer (60s) before the PTY is killed; reconnecting replays the rolling output buffer.
-- **tmux status (read this before touching terminal code):** the current implementation defaults to a **direct user-shell PTY** (`pty.ts` spawns `$SHELL -l`). tmux is _optional_: `isTmuxInstalled()` gates only auxiliary behavior such as CWD lookup and session cleanup in `server/index.ts`. `README.md` still describes tmux-backed persistence (`tmux -L knife`) as the core feature, so README and code have drifted. Do not assume either is authoritative without reading `ws.ts`/`pty.ts`; if you change session behavior, update the README too.
+- **tmux status (read this before touching terminal code):** the primary terminal mode is a **direct user-shell PTY** (`pty.ts` spawns `$SHELL -l`). tmux is _optional_: `isTmuxInstalled()` gates only auxiliary fallback CWD lookup (`getTabCwd`) and legacy session cleanup (`killSession`) in `server/index.ts`. If you change session behavior, update `README.md` too.
 - **Auth model:** single user. First run enters setup mode with a one-time console token (`/setup?token=...`); afterwards GitHub OAuth restricted to `allowedUsername`. Sessions are HMAC-signed `knife_session` cookies (`HttpOnly; SameSite=Lax`, `Secure` when public scheme is https). Use `timingSafeEqual` for any secret comparison.
 - **Config & data:** `config.json` and `data/` are gitignored and must never be committed. Data dir resolves via `KNIFE_DATA_DIR`, else `data/` next to the config, else `./data`.
 - **Themes:** defined once in `app/utils/themes.ts` (UI tokens + 16-color xterm palette, 5 themes). Add or change colors there only, not in component CSS.
