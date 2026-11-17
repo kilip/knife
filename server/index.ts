@@ -241,7 +241,7 @@ try {
           }
         }
 
-        if (!username && !isFirstRun) {
+        if (!username) {
           console.warn(`[ws] Unauthorized WebSocket attempt from ${clientIp}`);
           return new Response("Unauthorized", { status: 401 });
         }
@@ -262,7 +262,7 @@ try {
           data: {
             tabId,
             sessionName,
-            username: username || "setup-user",
+            username,
             cols,
             rows,
             lastPingTime: Date.now(),

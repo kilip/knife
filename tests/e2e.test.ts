@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createSessionToken } from "../server/auth";
 import { hasSession } from "../server/tmux";
@@ -152,6 +152,16 @@ describe("Knife End-to-End System Tests", () => {
     expect(res.status).toBe(403);
   });
 
+  it("rejects unauthenticated WS upgrade to /ws/terminal with 401 in first-run mode", async () => {
+    const res = await fetch(`http://127.0.0.1:${testPort}/ws/terminal?tabId=test`, {
+      headers: {
+        Upgrade: "websocket",
+        Connection: "Upgrade",
+      },
+    });
+    expect(res.status).toBe(401);
+  });
+
   it("completes first-run setup and saves configuration", async () => {
     const res = await fetch(`http://127.0.0.1:${testPort}/api/setup`, {
       method: "POST",
@@ -183,6 +193,16 @@ describe("Knife End-to-End System Tests", () => {
       }),
     });
     expect(repeatRes.status).toBe(400);
+  });
+
+  it("rejects unauthenticated WS upgrade to /ws/terminal with 401 in configured mode", async () => {
+    const res = await fetch(`http://127.0.0.1:${testPort}/ws/terminal?tabId=test`, {
+      headers: {
+        Upgrade: "websocket",
+        Connection: "Upgrade",
+      },
+    });
+    expect(res.status).toBe(401);
   });
 
   it("manages tab lifecycle and preserves direct shell session on disconnect", async () => {
@@ -543,5 +563,55 @@ describe("Knife End-to-End System Tests", () => {
     });
     const checkTabs = (await checkRes.json()) as Array<{ id: string }>;
     expect(checkTabs.length).toBe(0);
+  });
+
+  it("fails startup on corrupt config.json instead of falling back to unauthenticated first-run", async () => {
+    const corruptDir = join("/tmp", `knife-e2e-corrupt-${Date.now()}`);
+    const corruptConfigPath = join(corruptDir, "config.json");
+    const corruptPort = 3590;
+    mkdirSync(corruptDir, { recursive: true });
+    writeFileSync(corruptConfigPath, "{ invalid json", "utf-8");
+
+    try {
+      const proc = Bun.spawn(
+        [
+          "bun",
+          "run",
+          "server/index.ts",
+          "--port",
+          String(corruptPort),
+          "--config",
+          corruptConfigPath,
+        ],
+        {
+          cwd: process.cwd(),
+          env: {
+            ...process.env,
+            KNIFE_DATA_DIR: join(corruptDir, "data"),
+            KNIFE_CONFIG_PATH: corruptConfigPath,
+            KNIFE_PORT: String(corruptPort),
+            KNIFE_HOST: "127.0.0.1",
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+
+      const exitCode = await proc.exited;
+      const stderrText = await new Response(proc.stderr).text();
+      expect(exitCode).not.toBe(0);
+      expect(stderrText).toContain("Failed to parse config");
+
+      await expect(
+        fetch(`http://127.0.0.1:${corruptPort}/ws/terminal?tabId=test`, {
+          headers: {
+            Upgrade: "websocket",
+            Connection: "Upgrade",
+          },
+        }),
+      ).rejects.toThrow();
+    } finally {
+      rmSync(corruptDir, { recursive: true, force: true });
+    }
   });
 });
