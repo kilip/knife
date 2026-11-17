@@ -25,6 +25,7 @@ import {
 import { getClientIp } from "./proxy";
 import { formatRequestLog, shouldLogRequest } from "./request-log";
 import { handleServiceCommand } from "./service";
+import { getServiceManager } from "./service/factory";
 import { getShellName, getUserShell, isTmuxInstalled } from "./shell";
 import {
   getTabsPath,
@@ -64,6 +65,7 @@ if (cliArgs.help) {
 Usage: knife [command] [options]
 
 Commands:
+  onboarding            Start or attach to first-run setup and print the setup URL
   service <action>      Manage background service (install, uninstall, start, stop, status, restart)
 
 Options:
@@ -87,6 +89,45 @@ if (!isTmuxInstalled()) {
   console.log("[server] tmux is not installed. Direct user shell mode is active.");
 }
 let { config, isFirstRun, configPath } = loadConfig(cliArgs);
+
+if (cliArgs.onboarding) {
+  if (!isFirstRun) {
+    console.log(`Knife is already configured (allowed user: ${config.auth?.allowedUsername}).`);
+    console.log("Setup mode is only available before initial configuration.");
+    process.exit(0);
+  }
+
+  // Attach to an active background service in setup mode when using default config/port
+  if (!cliArgs.configPath) {
+    try {
+      const status = await getServiceManager(process.platform).status({
+        action: "status",
+        name: "knife",
+        system: false,
+        env: {},
+        help: false,
+      });
+      if (
+        status.active &&
+        status.setupUrl &&
+        (!cliArgs.port || status.setupUrl.includes(`:${cliArgs.port}/`))
+      ) {
+        const tokenMatch = status.setupUrl.match(/[?&]token=([a-zA-Z0-9_-]+)/);
+        console.log(`\n${"=".repeat(64)}`);
+        console.log("  KNIFE - First Run Setup (Running Service)");
+        console.log("=".repeat(64));
+        console.log(`\n  \x1b[36m\x1b[1m${status.setupUrl}\x1b[0m\n`);
+        if (tokenMatch) {
+          console.log(`One-time Setup Token: \x1b[33m${tokenMatch[1]}\x1b[0m`);
+        }
+        console.log(`${"=".repeat(64)}\n`);
+        process.exit(0);
+      }
+    } catch {
+      // Service manager unavailable; fall through to start setup mode locally
+    }
+  }
+}
 
 // Initialize tabs from persistent storage
 let currentTabs = loadTabs();
@@ -1082,8 +1123,7 @@ try {
       // Handle redirects for setup and login
       if (isFirstRun) {
         if (!url.pathname.startsWith("/setup")) {
-          const token = getActiveSetupToken();
-          return Response.redirect(`/setup?token=${token}`, 302);
+          return Response.redirect("/setup", 302);
         }
       } else {
         if (url.pathname === "/setup") {

@@ -124,6 +124,23 @@ describe("Knife End-to-End System Tests", () => {
     expect(pubData.isFirstRun).toBe(true);
   });
 
+  it("redirects GET / and non-/setup paths to /setup without leaking setup token", async () => {
+    for (const path of ["/", "/login", "/terminal"]) {
+      const res = await fetch(`http://127.0.0.1:${testPort}${path}`, {
+        redirect: "manual",
+      });
+      expect(res.status).toBe(302);
+      const location = res.headers.get("Location") ?? "";
+      expect(location).toBe("/setup");
+      expect(location).not.toContain("?token=");
+      expect(location).not.toContain(setupToken);
+
+      const body = await res.text();
+      expect(body).not.toContain("?token=");
+      expect(body).not.toContain(setupToken);
+    }
+  });
+
   it("serves sw.js and manifest.webmanifest with proper headers", async () => {
     const swRes = await fetch(`http://127.0.0.1:${testPort}/sw.js`);
     expect(swRes.status).toBe(200);
@@ -137,7 +154,7 @@ describe("Knife End-to-End System Tests", () => {
     expect(manifestRes.headers.get("Cache-Control")).toBe("no-cache");
   });
 
-  it("rejects setup with invalid token", async () => {
+  it("rejects setup with invalid token without logging expected token", async () => {
     const res = await fetch(`http://127.0.0.1:${testPort}/api/setup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -150,6 +167,19 @@ describe("Knife End-to-End System Tests", () => {
       }),
     });
     expect(res.status).toBe(403);
+
+    const deadline = Date.now() + 2000;
+    while (!capturedStderr.includes("[setup] Token verification failed") && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 20));
+    }
+
+    const failedLines = `${capturedStdout}\n${capturedStderr}`
+      .split("\n")
+      .filter((line) => line.includes("Token verification failed"));
+    expect(failedLines.length).toBeGreaterThan(0);
+    for (const line of failedLines) {
+      expect(line).not.toContain(setupToken);
+    }
   });
 
   it("rejects unauthenticated WS upgrade to /ws/terminal with 401 in first-run mode", async () => {
@@ -613,5 +643,102 @@ describe("Knife End-to-End System Tests", () => {
     } finally {
       rmSync(corruptDir, { recursive: true, force: true });
     }
+  });
+
+  it("knife onboarding starts setup mode and prints setup URL with token to local stdout only", async () => {
+    const onboardingDir = join("/tmp", `knife-onboarding-${Date.now()}`);
+    const onboardingConfigPath = join(onboardingDir, "config.json");
+    const onboardingPort = 3591;
+    mkdirSync(onboardingDir, { recursive: true });
+
+    let onboardingProc: ReturnType<typeof Bun.spawn> | null = null;
+    try {
+      onboardingProc = Bun.spawn(
+        [
+          "bun",
+          "run",
+          "server/index.ts",
+          "onboarding",
+          "--port",
+          String(onboardingPort),
+          "--config",
+          onboardingConfigPath,
+        ],
+        {
+          cwd: process.cwd(),
+          env: {
+            ...process.env,
+            KNIFE_DATA_DIR: join(onboardingDir, "data"),
+            KNIFE_CONFIG_PATH: onboardingConfigPath,
+            KNIFE_PORT: String(onboardingPort),
+            KNIFE_HOST: "127.0.0.1",
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+
+      const stream = onboardingProc.stdout as ReadableStream<Uint8Array>;
+      const reader = stream.getReader();
+      const decoder = new TextDecoder();
+      let stdoutText = "";
+      let onboardingToken = "";
+
+      const deadline = Date.now() + 5000;
+      while (Date.now() < deadline) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        stdoutText += decoder.decode(value, { stream: true });
+        const match = stdoutText.match(
+          // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI escape sequence match
+          /One-time Setup Token:\s*(?:\x1b\[[0-9;]*m)*([a-f0-9]{32,64})/i,
+        );
+        if (match) {
+          onboardingToken = match[1];
+          break;
+        }
+      }
+
+      expect(onboardingToken.length).toBeGreaterThanOrEqual(32);
+      expect(stdoutText).toContain(
+        `http://127.0.0.1:${onboardingPort}/setup?token=${onboardingToken}`,
+      );
+
+      // Verify HTTP GET / redirects without leaking token
+      const res = await fetch(`http://127.0.0.1:${onboardingPort}/`, {
+        redirect: "manual",
+      });
+      expect(res.status).toBe(302);
+      expect(res.headers.get("Location")).toBe("/setup");
+      expect(await res.text()).not.toContain(onboardingToken);
+    } finally {
+      if (onboardingProc) {
+        try {
+          onboardingProc.kill();
+        } catch {}
+      }
+      rmSync(onboardingDir, { recursive: true, force: true });
+    }
+  });
+
+  it("knife onboarding exits cleanly when already configured", async () => {
+    const proc = Bun.spawn(
+      ["bun", "run", "server/index.ts", "onboarding", "--config", configPath],
+      {
+        cwd: process.cwd(),
+        env: {
+          ...process.env,
+          KNIFE_DATA_DIR: join(testDir, "data"),
+          KNIFE_CONFIG_PATH: configPath,
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+
+    const exitCode = await proc.exited;
+    const stdoutText = await new Response(proc.stdout).text();
+    expect(exitCode).toBe(0);
+    expect(stdoutText).toContain("Knife is already configured");
   });
 });

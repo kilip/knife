@@ -59,6 +59,7 @@ export function resolveConfigPath(cliConfigPath?: string): string {
 
 export const CONFIG_PATH = resolveConfigPath();
 export function parseCliArgs(args: string[]): {
+  onboarding?: boolean;
   host?: string;
   port?: number;
   domain?: string;
@@ -67,6 +68,7 @@ export function parseCliArgs(args: string[]): {
   unknown?: string[];
 } {
   const result: {
+    onboarding?: boolean;
     host?: string;
     port?: number;
     domain?: string;
@@ -79,6 +81,8 @@ export function parseCliArgs(args: string[]): {
     const arg = args[i];
     if (arg === "-h" || arg === "--help") {
       result.help = true;
+    } else if (arg === "onboarding" && !result.onboarding) {
+      result.onboarding = true;
     } else if (arg === "--host" && i + 1 < args.length) {
       result.host = args[++i];
     } else if (arg.startsWith("--host=")) {

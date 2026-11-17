@@ -81,7 +81,7 @@ Knife defaults to listening on `127.0.0.1:3000`.
 
 ### 3. First-Run Setup Wizard
 
-On initial startup, knife generates a cryptographically secure one-time setup token and prints a clickable setup URL to your console:
+On initial startup (or by running `knife onboarding`), knife generates a cryptographically secure one-time setup token and prints a clickable setup URL to your local console:
 
 ```
 ================================================================
@@ -96,6 +96,8 @@ Open the following ready-to-click URL in your browser to configure knife:
 One-time Setup Token: 0123456789abcdef...
 ================================================================
 ```
+
+For security, unauthenticated HTTP requests in first-run mode redirect to `/setup` without `?token=`. Retrieve the setup URL and token locally from your terminal or via `knife onboarding`.
 
 Click the link (or navigate to `/setup?token=<token>`) to configure:
 
@@ -191,8 +193,10 @@ Configuration precedence:
 CLI Flags > Environment Variables > config.json > Defaults
 ```
 
-### CLI Flags
+### CLI Commands & Flags
 
+- `knife onboarding`: Start or attach to first-run setup mode and print the one-time setup URL and token to local stdout
+- `knife service <action>`: Manage background service (`install`, `uninstall`, `start`, `stop`, `status`, `restart`)
 - `--host <ip>`: Listen host (default: `127.0.0.1`)
 - `-p, --port <number>`: Listen port (default: `3000`)
 - `-d, --domain <domain>`: Public domain (default: `""` or `KNIFE_PUBLIC_DOMAIN`)
