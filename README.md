@@ -151,7 +151,7 @@ Both space-separated (`knife service <cmd>`) and colon-separated (`knife service
   - `-d, --domain <domain>`: Explicit public domain override.
   - `--name <str>`: Custom service name (default: `knife`).
   - `--user`: Install as user-level service/agent (default).
-  - `--system`: Install as a system-wide daemon (requires `sudo` / Administrator).
+  - `--system`: Install as a system-wide daemon (requires `sudo` / Administrator; runs as `root` without a `User=` drop — prefer `--user` unless system-wide execution is required).
 - **`knife service start`**: Starts the registered background service.
 - **`knife service stop`**: Stops the running service.
 - **`knife service restart`**: Restarts the service.
@@ -182,6 +182,14 @@ knife.example.com {
 ```
 
 _Note:_ Knife trusts `X-Forwarded-*` headers only from configured proxy addresses (by default: loopback `127.0.0.1`, `::1`, and private subnets).
+
+---
+
+## Security Model & Assumptions
+
+- **`--system` root execution:** Running `knife service install --system` registers a system-wide daemon that executes as `root` without a `User=` drop. Prefer the default `--user` mode unless a system-wide service is explicitly required.
+- **`isProtectedPath` scope (safety guardrail, not a security boundary):** `isProtectedPath` guards file-browser write, delete, and rename operations against accidental modification of system paths, the Knife installation root, `data/`, and `config.json`. It is a safety guardrail rather than a security boundary, since authenticated users already have interactive shell access.
+- **Self-update trust assumptions:** Built-in self-update runs `bun add -g @kilip/knife@latest` (or `npm install -g @kilip/knife@latest`) without version pinning or provenance verification, trusting the npm registry and published package integrity.
 
 ---
 
