@@ -110,6 +110,22 @@ describe("Filesystem API & Security Guardrails", () => {
     expect(view[1]).toBe(0x4b);
   });
 
+  it("createZipStream safely archives filenames starting with a dash without option injection", async () => {
+    const dashFile = join(TEST_DIR, "-test.txt");
+    writeFileSync(dashFile, "dash-safe-content");
+
+    const { stream, archiveName } = await createZipStream([dashFile]);
+    expect(archiveName).toBe("-test.txt.zip");
+    expect(stream).toBeDefined();
+
+    const buffer = await new Response(stream).arrayBuffer();
+    expect(buffer.byteLength).toBeGreaterThan(0);
+    const view = new Uint8Array(buffer);
+    expect(view[0]).toBe(0x50);
+    expect(view[1]).toBe(0x4b);
+    expect(new TextDecoder().decode(view)).toContain("-test.txt");
+  });
+
   it("getTabCwd returns null for non-existent session", () => {
     const cwd = getTabCwd("knife-nonexistent-session-xyz");
     expect(cwd).toBeNull();

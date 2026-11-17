@@ -241,7 +241,7 @@ export async function createZipStream(
     archiveName = "archive.zip";
   }
 
-  const proc = Bun.spawn(["zip", "-r", "-q", "-", ...relPaths], {
+  const proc = Bun.spawn(["zip", "-r", "-q", "-", "--", ...relPaths], {
     cwd,
     stdout: "pipe",
     stderr: "pipe",
