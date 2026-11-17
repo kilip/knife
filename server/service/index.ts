@@ -9,7 +9,6 @@ export * from "./config";
 export * from "./factory";
 export { LaunchdServiceManager } from "./managers/launchd";
 export { SystemdServiceManager } from "./managers/systemd";
-export { WindowsServiceManager } from "./managers/windows";
 export * from "./paths";
 export * from "./runner";
 export * from "./templates";

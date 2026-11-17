@@ -1,7 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { LaunchdServiceManager } from "./managers/launchd";
 import { SystemdServiceManager } from "./managers/systemd";
-import { WindowsServiceManager } from "./managers/windows";
 import { defaultRunner } from "./runner";
 import type { CommandRunner, ServiceManager } from "./types";
 
@@ -21,7 +20,7 @@ export function isWsl(): boolean {
 
 /**
  * Platform manager factory.
- * Resolves the appropriate ServiceManager driver for Linux, macOS, or Windows.
+ * Resolves the appropriate ServiceManager driver for Linux or macOS.
  */
 export function getServiceManager(
   platform: NodeJS.Platform = process.platform,
@@ -32,11 +31,9 @@ export function getServiceManager(
       return new SystemdServiceManager(runner);
     case "darwin":
       return new LaunchdServiceManager(runner);
-    case "win32":
-      return new WindowsServiceManager(runner);
     default:
       throw new Error(
-        `Unsupported platform '${platform}' for Knife background service. Supported platforms: Linux (systemd), macOS (launchd), Windows.`,
+        `Unsupported platform '${platform}' for Knife background service. Supported platforms: Linux (systemd), macOS (launchd).`,
       );
   }
 }

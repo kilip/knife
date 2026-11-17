@@ -58,25 +58,3 @@ ${envEntries}
 </plist>
 `;
 }
-
-/**
- * Generates a Windows batch runner script (.cmd) for Windows Task Scheduler or SCM.
- */
-export function renderWindowsRunnerScript(ctx: ResolvedServiceContext): string {
-  const setEnvLines = Object.entries(ctx.env)
-    .map(([key, val]) => `@set "${key}=${val}"`)
-    .join("\r\n");
-
-  const execArgs = [ctx.entrypointPath, ...ctx.cliArgs]
-    .map((a) => (a.includes(" ") ? `"${a}"` : a))
-    .join(" ");
-
-  const stdoutLog = `${ctx.logDir}\\stdout.log`;
-  const stderrLog = `${ctx.logDir}\\stderr.log`;
-
-  return `@echo off\r
-${setEnvLines}\r
-cd /d "${ctx.workingDir}"\r
-"${ctx.bunPath}" run ${execArgs} >> "${stdoutLog}" 2>> "${stderrLog}"\r
-`;
-}

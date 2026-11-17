@@ -49,4 +49,27 @@ describe("User Shell Detection and Direct PTY", () => {
     // Clean up
     pty.close();
   });
+
+  it("returns null from PtySession.getCwd() on non-Linux platforms without throwing", () => {
+    const pty = new PtySession({
+      tabId: "test-non-linux-cwd",
+      cols: 80,
+      rows: 24,
+    });
+
+    const originalDescriptor = Object.getOwnPropertyDescriptor(process, "platform");
+    Object.defineProperty(process, "platform", {
+      value: "darwin",
+      configurable: true,
+    });
+
+    try {
+      expect(pty.getCwd()).toBeNull();
+    } finally {
+      if (originalDescriptor) {
+        Object.defineProperty(process, "platform", originalDescriptor);
+      }
+      pty.close();
+    }
+  });
 });

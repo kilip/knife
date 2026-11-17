@@ -17,10 +17,8 @@ import {
   parseServiceCliArgs,
   renderLaunchdPlist,
   renderSystemdUnit,
-  renderWindowsRunnerScript,
   resolveBunExecutable,
   SystemdServiceManager,
-  WindowsServiceManager,
 } from "../server/service";
 
 class MockCommandRunner implements CommandRunner {
@@ -114,7 +112,7 @@ describe("Service CLI Argument Parsing", () => {
 });
 
 describe("Path & Environment Utilities", () => {
-  it("resolves platform paths for Linux, Darwin, and Windows", () => {
+  it("resolves platform paths for Linux and Darwin", () => {
     const linux = getPlatformPaths("knife", "linux", { HOME: "/home/test" });
     expect(linux.userConfigDir).toBe("/home/test/.config/knife");
     expect(linux.userDataDir).toBe("/home/test/.local/share/knife/data");
@@ -122,14 +120,6 @@ describe("Path & Environment Utilities", () => {
     const darwin = getPlatformPaths("knife", "darwin", { HOME: "/Users/test" });
     expect(darwin.userConfigDir).toBe("/Users/test/Library/Application Support/knife");
     expect(darwin.userLogDir).toBe("/Users/test/Library/Logs/knife");
-
-    const win = getPlatformPaths("knife", "win32", {
-      USERPROFILE: "C:\\Users\\test",
-      APPDATA: "C:\\Users\\test\\AppData\\Roaming",
-      LOCALAPPDATA: "C:\\Users\\test\\AppData\\Local",
-    });
-    expect(win.userConfigDir).toBe("C:\\Users\\test\\AppData\\Roaming\\knife");
-    expect(win.userLogDir).toBe("C:\\Users\\test\\AppData\\Local\\knife\\logs");
   });
 
   it("constructs service PATH including bun directory", () => {
@@ -266,21 +256,13 @@ describe("Template Generators", () => {
     expect(plist).toContain("<key>RunAtLoad</key>");
     expect(plist).toContain("<true/>");
   });
-
-  it("renders Windows runner batch script", () => {
-    const script = renderWindowsRunnerScript(dummyCtx);
-    expect(script).toContain("@echo off");
-    expect(script).toContain('@set "NODE_ENV=production"');
-    expect(script).toContain('cd /d "/home/user/code/knife"');
-    expect(script).toContain('"/home/user/.bun/bin/bun" run');
-  });
 });
 
 describe("Platform Factory & Managers", () => {
   it("resolves correct driver from factory", () => {
     expect(getServiceManager("linux")).toBeInstanceOf(SystemdServiceManager);
     expect(getServiceManager("darwin")).toBeInstanceOf(LaunchdServiceManager);
-    expect(getServiceManager("win32")).toBeInstanceOf(WindowsServiceManager);
+    expect(() => getServiceManager("win32")).toThrow("Unsupported platform");
     expect(() => getServiceManager("aix" as any)).toThrow("Unsupported platform");
   });
 
@@ -352,26 +334,6 @@ describe("Platform Factory & Managers", () => {
 
     await manager.stop({ action: "stop", name: "test-service", system: false, env: {} });
     expect(runner.calls.some((c) => c.cmd === "launchctl" && c.args.includes("stop"))).toBe(true);
-  });
-
-  it("executes WindowsServiceManager lifecycle commands using mock runner", async () => {
-    const runner = new MockCommandRunner();
-    runner.responses.set("schtasks.exe /Query", {
-      exitCode: 0,
-      stdout: "Status: Running\nTaskName: \\Knife-test-service",
-      stderr: "",
-    });
-
-    const manager = new WindowsServiceManager(runner);
-    await manager.start({ action: "start", name: "test-service", system: false, env: {} });
-    expect(runner.calls.some((c) => c.cmd === "schtasks.exe" && c.args.includes("/Run"))).toBe(
-      true,
-    );
-
-    await manager.stop({ action: "stop", name: "test-service", system: false, env: {} });
-    expect(runner.calls.some((c) => c.cmd === "schtasks.exe" && c.args.includes("/End"))).toBe(
-      true,
-    );
   });
 });
 

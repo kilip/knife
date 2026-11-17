@@ -131,7 +131,7 @@ export class PtySession {
   }
 
   public getCwd(): string | null {
-    if (!this.proc?.pid) return null;
+    if (process.platform !== "linux" || !this.proc?.pid) return null;
     try {
       return readlinkSync(`/proc/${this.proc.pid}/cwd`);
     } catch {

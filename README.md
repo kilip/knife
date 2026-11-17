@@ -43,7 +43,7 @@ Knife Bun HTTP & WebSocket Server
 
 ## 📋 Prerequisites
 
-- **Linux** (x86_64 or aarch64; primary target)
+- **Supported platforms**: **Linux** (`x86_64` or `aarch64`, primary target), **macOS** (best-effort; live CWD tracking via `/proc` is Linux-only). **Windows** is unsupported.
 - **Bun** (v1.2+)
 
 ---
@@ -142,7 +142,6 @@ Both space-separated (`knife service <cmd>`) and colon-separated (`knife service
 - **`knife service install`**: Registers an OS service unit:
   - **Linux (`systemd`)**: Installs a user unit at `~/.config/systemd/user/knife.service`. Verifies and enables user lingering (`loginctl enable-linger $USER`) so Knife persists after logout and boots with the system.
   - **macOS (`launchd`)**: Installs a user agent at `~/Library/LaunchAgents/com.kilip.knife.plist`.
-  - **Windows**: Installs a user logon task via Windows Task Scheduler or system service via `sc.exe`.
   - `--config <path>`: Explicit path to `config.json` (auto-detects existing config by default).
   - `--dir <path>`: Working directory for state and storage.
   - `-p, --port <port>`: Explicit port override.

@@ -4,7 +4,7 @@ Guidance for AI coding agents working on **knife** (`@kilip/knife`): a single-us
 
 ## Stack
 
-- **Runtime:** Bun 1.2+ (`Bun.serve`, `Bun.Terminal`, `Bun.spawn`). Linux is the primary target.
+- **Runtime:** Bun 1.2+ (`Bun.serve`, `Bun.Terminal`, `Bun.spawn`). Linux is the primary target; macOS is best-effort; Windows is unsupported.
 - **Client:** React 19 + React Router 8 in framework mode with **`ssr: false`** (SPA), Vite, Tailwind 4, xterm.js, Serwist (PWA).
 - **Language:** TypeScript, `strict`. Alias `~/*` -> `app/*`.
 - **Package manager:** Bun only. Never add `package-lock.json`, `yarn.lock` or `pnpm-lock.yaml`.
