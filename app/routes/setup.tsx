@@ -2,6 +2,18 @@ import { ArrowRight, Check, Copy, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { applyTheme, THEMES } from "~/utils/themes";
 
+/**
+ * Extracts a one-time setup token from a URL fragment (e.g. `#token=...`).
+ * Returns null if the fragment is empty or does not contain a non-empty `token` param.
+ */
+export function extractSetupTokenFromHash(hash: string): string | null {
+  if (!hash) return null;
+  const raw = hash.startsWith("#") ? hash.slice(1) : hash;
+  const params = new URLSearchParams(raw);
+  const token = params.get("token");
+  return token || null;
+}
+
 export default function Setup() {
   const [token, setToken] = useState("");
   const [publicDomain, setPublicDomain] = useState("");
@@ -19,11 +31,11 @@ export default function Setup() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Read ?token= from URL if present
-    const params = new URLSearchParams(window.location.search);
-    const urlToken = params.get("token");
-    if (urlToken) {
-      setToken(urlToken);
+    // Read #token= from URL fragment if present and clear the hash from browser history
+    const hashToken = extractSetupTokenFromHash(window.location.hash);
+    if (hashToken) {
+      setToken(hashToken);
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
     }
 
     // Default publicDomain to current window host if not already filled
