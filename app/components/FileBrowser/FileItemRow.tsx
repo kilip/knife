@@ -64,6 +64,7 @@ export function FileItemRow({
 }: FileItemRowProps) {
   const [nameVal, setNameVal] = useState(item.name);
   const inputRef = useRef<HTMLInputElement>(null);
+  const lastPointerTypeRef = useRef<string>("");
 
   useEffect(() => {
     if (isRenaming) {
@@ -97,10 +98,20 @@ export function FileItemRow({
     <div
       draggable={!isRenaming}
       onDragStart={handleDragStart}
-      onClick={() => onSelect(item)}
+      onPointerDown={(e) => {
+        lastPointerTypeRef.current = e.pointerType;
+      }}
+      onClick={() => {
+        const isTouch = lastPointerTypeRef.current === "touch";
+        lastPointerTypeRef.current = "";
+        onSelect(item);
+        if (isTouch) {
+          onOpen(item);
+        }
+      }}
       onDoubleClick={() => onOpen(item)}
       onContextMenu={(e) => onContextMenu(e, item)}
-      className={`group flex items-center px-2 py-1.5 text-xs select-none cursor-pointer rounded-sm transition-colors ${
+      className={`group flex items-center px-2 py-1.5 text-xs select-none cursor-pointer touch-manipulation rounded-sm transition-colors ${
         isSelected
           ? "bg-[var(--accent)]/15 text-[var(--fg-base)]"
           : "hover:bg-[var(--bg-hover)] text-[var(--fg-muted)] hover:text-[var(--fg-base)]"

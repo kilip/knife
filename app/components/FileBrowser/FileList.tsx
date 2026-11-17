@@ -99,7 +99,7 @@ export function FileList({
           <div
             onDoubleClick={onNavigateParent}
             onClick={onNavigateParent}
-            className="flex items-center px-2 py-1.5 text-xs text-[var(--fg-muted)] hover:text-[var(--fg-base)] hover:bg-[var(--bg-hover)] cursor-pointer rounded-sm select-none"
+            className="flex items-center px-2 py-1.5 text-xs text-[var(--fg-muted)] hover:text-[var(--fg-base)] hover:bg-[var(--bg-hover)] cursor-pointer touch-manipulation rounded-sm select-none"
           >
             <Folder className="w-4 h-4 text-[var(--accent)] mr-2 shrink-0" />
             <span className="font-mono font-medium">..</span>
