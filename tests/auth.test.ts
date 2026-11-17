@@ -4,6 +4,7 @@ import {
   createSessionToken,
   generateSetupToken,
   getActiveSetupToken,
+  revokeSession,
   verifySessionToken,
   verifySetupToken,
 } from "../server/auth";
@@ -35,6 +36,9 @@ describe("Auth & Setup Token", () => {
     const verified = verifySessionToken(token, secret);
     expect(verified).not.toBeNull();
     expect(verified?.username).toBe("octocat");
+    expect(typeof verified?.sid).toBe("string");
+    expect(verified?.sid.length).toBeGreaterThan(0);
+    expect(typeof verified?.iat).toBe("number");
 
     // Fails with wrong secret
     expect(verifySessionToken(token, "wrong-secret")).toBeNull();
@@ -42,5 +46,9 @@ describe("Auth & Setup Token", () => {
     // Fails with tampered token
     const tampered = token.slice(0, -4) + "abcd";
     expect(verifySessionToken(tampered, secret)).toBeNull();
+
+    // Fails after session revocation
+    revokeSession(verified!.sid);
+    expect(verifySessionToken(token, secret)).toBeNull();
   });
 });

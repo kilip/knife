@@ -3,10 +3,13 @@ import type { KnifeConfig } from "./config";
 
 export interface SessionData {
   username: string;
+  sid: string;
+  iat: number; // Unix timestamp in seconds
   exp: number; // Unix timestamp in seconds
 }
 
 let activeSetupToken: string | null = null;
+const revokedSessionIds = new Set<string>();
 
 export function generateSetupToken(): string {
   activeSetupToken = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
@@ -45,14 +48,23 @@ export function createSessionToken(
   secret: string,
   maxAgeSeconds: number = 30 * 24 * 3600,
 ): string {
+  const now = Math.floor(Date.now() / 1000);
   const payload: SessionData = {
     username,
-    exp: Math.floor(Date.now() / 1000) + maxAgeSeconds,
+    sid: crypto.randomUUID(),
+    iat: now,
+    exp: now + maxAgeSeconds,
   };
   const jsonStr = JSON.stringify(payload);
   const payloadBase64 = Buffer.from(jsonStr).toString("base64url");
   const signature = createHmac("sha256", secret).update(payloadBase64).digest("hex");
   return `${payloadBase64}.${signature}`;
+}
+
+export function revokeSession(sid: string): void {
+  if (sid) {
+    revokedSessionIds.add(sid);
+  }
 }
 
 export function verifySessionToken(token: string, secret: string): SessionData | null {
@@ -71,6 +83,20 @@ export function verifySessionToken(token: string, secret: string): SessionData |
 
     const payloadJson = Buffer.from(payloadBase64, "base64url").toString("utf-8");
     const session: SessionData = JSON.parse(payloadJson);
+
+    if (
+      typeof session.username !== "string" ||
+      !session.username ||
+      typeof session.sid !== "string" ||
+      !session.sid ||
+      typeof session.iat !== "number"
+    ) {
+      return null;
+    }
+
+    if (revokedSessionIds.has(session.sid)) {
+      return null;
+    }
 
     if (typeof session.exp !== "number" || Math.floor(Date.now() / 1000) > session.exp) {
       return null; // Expired

@@ -266,9 +266,11 @@ describe("Knife End-to-End System Tests", () => {
     };
     expect(createdTab.name).toBe("Work Tab");
 
-    // 3. Connect via WebSocket to the created tab
-    const wsUrl = `ws://127.0.0.1:${testPort}/ws/terminal?tabId=${createdTab.id}&sessionToken=${sessionToken}`;
-    const ws = new WebSocket(wsUrl);
+    // 3. Connect via WebSocket to the created tab using session cookie
+    const wsUrl = `ws://127.0.0.1:${testPort}/ws/terminal?tabId=${createdTab.id}`;
+    const ws = new WebSocket(wsUrl, {
+      headers: { Cookie: cookieHeader },
+    } as unknown as string[]);
 
     let output = "";
     const { promise: p1, resolve: r1, reject: rej1 } = Promise.withResolvers<void>();
@@ -297,9 +299,9 @@ describe("Knife End-to-End System Tests", () => {
     await closePromise;
 
     // 5. Reconnect to the same tab and verify session is intact
-
-    // 5. Reconnect to the same tab and verify session is intact
-    const ws2 = new WebSocket(wsUrl);
+    const ws2 = new WebSocket(wsUrl, {
+      headers: { Cookie: cookieHeader },
+    } as unknown as string[]);
     let output2 = "";
     const { promise: p2, resolve: r2, reject: rej2 } = Promise.withResolvers<void>();
 
@@ -600,6 +602,45 @@ describe("Knife End-to-End System Tests", () => {
     expect(validRes.status).toBe(200);
     const body = (await validRes.json()) as { theme: string };
     expect(body.theme).toBe("dracula");
+  });
+
+  it("ignores ?sessionToken= on WS and rejects old cookies after /auth/logout", async () => {
+    const sessionToken = createSessionToken("testowner", "test-secret-key-e2e");
+    const cookieHeader = `knife_session=${sessionToken}`;
+
+    // 1. ?sessionToken= query parameter without Cookie must be rejected with 401
+    const wsRes = await fetch(
+      `http://127.0.0.1:${testPort}/ws/terminal?tabId=tab-1&sessionToken=${sessionToken}`,
+      {
+        headers: {
+          Upgrade: "websocket",
+          Connection: "Upgrade",
+          "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+          "Sec-WebSocket-Version": "13",
+          Origin: `http://127.0.0.1:${testPort}`,
+        },
+      },
+    );
+    expect(wsRes.status).toBe(401);
+
+    // 2. Verify session works before logout
+    const meBefore = await fetch(`http://127.0.0.1:${testPort}/api/me`, {
+      headers: { Cookie: cookieHeader },
+    });
+    expect(meBefore.status).toBe(200);
+
+    // 3. Call /auth/logout with the session cookie
+    const logoutRes = await fetch(`http://127.0.0.1:${testPort}/auth/logout`, {
+      headers: { Cookie: cookieHeader },
+      redirect: "manual",
+    });
+    expect(logoutRes.status).toBe(302);
+
+    // 4. Old cookie must now be rejected with 401
+    const meAfter = await fetch(`http://127.0.0.1:${testPort}/api/me`, {
+      headers: { Cookie: cookieHeader },
+    });
+    expect(meAfter.status).toBe(401);
   });
 
   it("allows deleting all tabs down to zero tabs without auto-creating a new tab", async () => {

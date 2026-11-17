@@ -12,6 +12,7 @@ import {
   getGitHubOAuthUrl,
   getPublicOrigin,
   getSessionFromCookie,
+  revokeSession,
   verifySetupToken,
 } from "./auth";
 import { type KnifeConfig, loadConfig, parseCliArgs, saveConfig } from "./config";
@@ -234,23 +235,9 @@ try {
         }
 
         // Authenticate WebSocket connection
-        let username: string | null = null;
         const cookie = req.headers.get("cookie");
         const session = getSessionFromCookie(cookie, config.sessionSecret);
-
-        if (session) {
-          username = session.username;
-        } else {
-          // Alternatively check token in query parameter (for environments where cookie isn't passed on ws)
-          const queryToken = url.searchParams.get("sessionToken");
-          if (queryToken) {
-            const verified = getSessionFromCookie(
-              `knife_session=${queryToken}`,
-              config.sessionSecret,
-            );
-            if (verified) username = verified.username;
-          }
-        }
+        const username = session?.username ?? null;
 
         if (!username) {
           console.warn(`[ws] Unauthorized WebSocket attempt from ${clientIp}`);
@@ -504,6 +491,10 @@ try {
 
       // Logout endpoint
       if (url.pathname === "/auth/logout") {
+        const logoutSession = getSessionFromCookie(req.headers.get("cookie"), config.sessionSecret);
+        if (logoutSession) {
+          revokeSession(logoutSession.sid);
+        }
         const headers = new Headers(secHeaders);
         headers.set("Set-Cookie", createSessionCookieHeader("", config, true));
         headers.set("Location", "/login");
