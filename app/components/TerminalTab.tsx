@@ -484,6 +484,68 @@ export function TerminalTab({
 
     resizeObserver.observe(containerRef.current);
 
+    // Touch-drag scrolling fallback for xterm.js 6.0.0 (SmoothScrollableElement omits touch gestures)
+    const containerEl = containerRef.current;
+    let touchActive = false;
+    let isTouchScrolling = false;
+    let touchStartY = 0;
+    let touchLastY = 0;
+    let touchAccumulatedY = 0;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) {
+        touchActive = false;
+        isTouchScrolling = false;
+        return;
+      }
+      const target = e.target as HTMLElement | null;
+      if (target?.closest(".scrollbar")) {
+        touchActive = false;
+        return;
+      }
+      touchActive = true;
+      isTouchScrolling = false;
+      touchStartY = e.touches[0].clientY;
+      touchLastY = touchStartY;
+      touchAccumulatedY = 0;
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!touchActive || e.touches.length !== 1) {
+        touchActive = false;
+        isTouchScrolling = false;
+        return;
+      }
+      const currentY = e.touches[0].clientY;
+      if (!isTouchScrolling) {
+        if (Math.abs(currentY - touchStartY) < 6) return;
+        isTouchScrolling = true;
+      }
+      const deltaY = touchLastY - currentY;
+      touchLastY = currentY;
+      const pxPerLine = (term.options.fontSize ?? 15) * (term.options.lineHeight ?? 1.2) || 18;
+      touchAccumulatedY += deltaY;
+      const lines = Math.trunc(touchAccumulatedY / pxPerLine);
+      if (lines !== 0) {
+        term.scrollLines(lines);
+        touchAccumulatedY -= lines * pxPerLine;
+      }
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+    };
+
+    const handleTouchEnd = () => {
+      touchActive = false;
+      isTouchScrolling = false;
+      touchAccumulatedY = 0;
+    };
+
+    containerEl.addEventListener("touchstart", handleTouchStart, { passive: true });
+    containerEl.addEventListener("touchmove", handleTouchMove, { passive: false });
+    containerEl.addEventListener("touchend", handleTouchEnd, { passive: true });
+    containerEl.addEventListener("touchcancel", handleTouchEnd, { passive: true });
+
     // Initial fit
     setTimeout(() => {
       try {
@@ -505,6 +567,10 @@ export function TerminalTab({
       clearTimeout(reconnectTimer);
       clearInterval(heartbeatTimer);
       clearTimeout(resizeDebounceTimer);
+      containerEl.removeEventListener("touchstart", handleTouchStart);
+      containerEl.removeEventListener("touchmove", handleTouchMove);
+      containerEl.removeEventListener("touchend", handleTouchEnd);
+      containerEl.removeEventListener("touchcancel", handleTouchEnd);
       resizeObserver.disconnect();
       onDataDisposable.dispose();
       try {
