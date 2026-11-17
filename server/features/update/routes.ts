@@ -1,6 +1,4 @@
 import { Hono } from "hono";
-import { getSessionFromCookie } from "../../auth";
-import type { KnifeConfig } from "../../config";
 import {
   checkLatestVersion,
   detectPackageManager,
@@ -11,21 +9,11 @@ import {
 } from "./update";
 
 export interface UpdateRoutesDeps {
-  getConfig: () => KnifeConfig;
   getTabsCount: () => number;
 }
 
 export function createUpdateRoutes(deps: UpdateRoutesDeps) {
   const router = new Hono();
-
-  router.use("*", async (c, next) => {
-    const cfg = deps.getConfig();
-    const session = getSessionFromCookie(c.req.header("cookie") ?? null, cfg.sessionSecret);
-    if (!session) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
-    await next();
-  });
 
   router.get("/check", async (c) => {
     const force = c.req.query("force") === "true";

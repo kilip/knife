@@ -10,8 +10,8 @@ import {
   getActiveSetupToken,
   getGitHubOAuthUrl,
   getPublicOrigin,
-  getSessionFromCookie,
   revokeSession,
+  type SessionData,
   verifySetupToken,
 } from "./auth";
 import type { KnifeConfig } from "./config";
@@ -23,6 +23,7 @@ import { getShellName, getUserShell } from "./features/terminal/shell";
 import { isAllowedRequestOrigin } from "./features/terminal/ws";
 import { createUpdateRoutes } from "./features/update/routes";
 import { formatRequestLog, shouldLogRequest } from "./middleware/request-log";
+import { attachSession, requireAuth } from "./middleware/require-auth";
 import { getSecurityHeaders } from "./middleware/security-headers";
 import { getClientIp } from "./proxy";
 
@@ -34,6 +35,7 @@ export interface AppBindings {
 
 export interface AppVariables {
   clientIp: string;
+  session: SessionData | null;
 }
 
 export interface AppDeps {
@@ -88,6 +90,10 @@ export function createApp(deps: AppDeps) {
       headers,
     });
   });
+
+  // Attach parsed session to context and enforce default-deny auth on /api/*
+  app.use("*", attachSession(deps.getConfig));
+  app.use("/api/*", requireAuth());
 
   // Health check endpoints
   app.all("/health", (c) => c.json({ status: "ok" }));
@@ -281,7 +287,7 @@ export function createApp(deps: AppDeps) {
 
   app.all("/auth/logout", (c) => {
     const cfg = deps.getConfig();
-    const logoutSession = getSessionFromCookie(c.req.header("cookie") ?? null, cfg.sessionSecret);
+    const logoutSession = c.get("session");
     if (logoutSession) {
       revokeSession(logoutSession.sid);
     }
@@ -292,10 +298,7 @@ export function createApp(deps: AppDeps) {
   // User profile endpoint
   app.all("/api/me", (c) => {
     const cfg = deps.getConfig();
-    const currentSession = getSessionFromCookie(c.req.header("cookie") ?? null, cfg.sessionSecret);
-    if (!currentSession) {
-      return c.json({ authenticated: false }, 401);
-    }
+    const currentSession = c.get("session")!;
     return c.json({
       authenticated: true,
       username: currentSession.username,
@@ -310,13 +313,6 @@ export function createApp(deps: AppDeps) {
     const cfg = deps.getConfig();
     const secHeaders = getSecurityHeaders(cfg);
     if (c.req.method === "POST") {
-      const currentSession = getSessionFromCookie(
-        c.req.header("cookie") ?? null,
-        cfg.sessionSecret,
-      );
-      if (!currentSession) {
-        return c.json({ error: "Unauthorized" }, 401);
-      }
       const contentTypeErr = requireJsonContentType(c.req.raw, secHeaders);
       if (contentTypeErr) return contentTypeErr;
       const body = (await c.req.json().catch(() => ({}))) as { theme?: unknown };
@@ -342,22 +338,17 @@ export function createApp(deps: AppDeps) {
   app.route(
     "/api/tabs",
     createTabsRoutes({
-      getConfig: deps.getConfig,
       getTabs,
       setTabs,
       persistTabs: deps.persistTabs,
     }),
   );
 
-  app.route("/api/fs", createFsRoutes({ getConfig: deps.getConfig }));
+  app.route("/api/fs", createFsRoutes());
 
   app.all("/api/settings", async (c) => {
     const cfg = deps.getConfig();
     const secHeaders = getSecurityHeaders(cfg);
-    const currentSession = getSessionFromCookie(c.req.header("cookie") ?? null, cfg.sessionSecret);
-    if (!currentSession) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
     if (c.req.method === "GET") {
       return c.json(loadSettings(cfg.theme));
     }
@@ -380,7 +371,6 @@ export function createApp(deps: AppDeps) {
   app.route(
     "/api/system/update",
     createUpdateRoutes({
-      getConfig: deps.getConfig,
       getTabsCount: () => getTabs().length,
     }),
   );
@@ -396,7 +386,7 @@ export function createApp(deps: AppDeps) {
       return staticFile;
     }
 
-    const currentSession = getSessionFromCookie(c.req.header("cookie") ?? null, cfg.sessionSecret);
+    const currentSession = c.get("session");
 
     if (deps.getIsFirstRun()) {
       if (!reqPath.startsWith("/setup")) {

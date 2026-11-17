@@ -1,13 +1,10 @@
 import { Hono } from "hono";
-import { getSessionFromCookie } from "../../auth";
-import type { KnifeConfig } from "../../config";
 import { getDefaultHome } from "../fs/paths";
 import { getShellName } from "../terminal/shell";
 import { closeActivePty, getActivePty } from "../terminal/ws";
 import { saveTabs, type TabData } from "./store";
 
 export interface TabsRoutesDeps {
-  getConfig: () => KnifeConfig;
   getTabs: () => TabData[];
   setTabs: (tabs: TabData[]) => void;
   persistTabs?: (tabs: TabData[]) => void;
@@ -25,15 +22,6 @@ function requireJsonContentType(req: Request): Response | null {
 export function createTabsRoutes(deps: TabsRoutesDeps) {
   const router = new Hono();
   const persist = deps.persistTabs ?? saveTabs;
-
-  router.use("*", async (c, next) => {
-    const cfg = deps.getConfig();
-    const session = getSessionFromCookie(c.req.header("cookie") ?? null, cfg.sessionSecret);
-    if (!session) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
-    await next();
-  });
 
   router.get("/", (c) => {
     return c.json(deps.getTabs());

@@ -1,15 +1,9 @@
 import { existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { Hono } from "hono";
-import { getSessionFromCookie } from "../../auth";
-import type { KnifeConfig } from "../../config";
 import { listDirectory, resolveDownloadHeaders, statItem } from "./list";
 import { getDefaultHome, isProtectedPath, normalizePath } from "./paths";
 import { createZipStream } from "./zip";
-
-export interface FsRoutesDeps {
-  getConfig: () => KnifeConfig;
-}
 
 function requireJsonContentType(req: Request): Response | null {
   const contentType = req.headers.get("content-type");
@@ -20,17 +14,8 @@ function requireJsonContentType(req: Request): Response | null {
   return null;
 }
 
-export function createFsRoutes(deps: FsRoutesDeps) {
+export function createFsRoutes() {
   const router = new Hono();
-
-  router.use("*", async (c, next) => {
-    const cfg = deps.getConfig();
-    const session = getSessionFromCookie(c.req.header("cookie") ?? null, cfg.sessionSecret);
-    if (!session) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
-    await next();
-  });
 
   router.get("/list", (c) => {
     const reqPath = c.req.query("path");

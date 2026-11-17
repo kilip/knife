@@ -158,7 +158,7 @@ describe("Hono App Routes", () => {
 
     const unauthRes = await app.request("/api/me");
     expect(unauthRes.status).toBe(401);
-    expect(await unauthRes.json()).toEqual({ authenticated: false });
+    expect(await unauthRes.json()).toEqual({ error: "Unauthorized" });
 
     const token = createSessionToken("testowner", config.sessionSecret);
     const authRes = await app.request("/api/me", {
@@ -175,7 +175,12 @@ describe("Hono App Routes", () => {
     const app = makeApp();
     const token = createSessionToken("testowner", config.sessionSecret);
 
-    const getRes = await app.request("/api/theme");
+    const unauthGetRes = await app.request("/api/theme");
+    expect(unauthGetRes.status).toBe(401);
+
+    const getRes = await app.request("/api/theme", {
+      headers: { Cookie: `knife_session=${token}` },
+    });
     expect(getRes.status).toBe(200);
     expect(await getRes.json()).toEqual({ theme: "catppuccin-mocha" });
 
