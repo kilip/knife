@@ -22,6 +22,7 @@ export interface KnifeConfig {
     githubClientId: string;
     githubClientSecret: string;
     allowedUsername: string;
+    allowedUserId?: number;
   };
   sessionSecret: string;
 }
@@ -159,11 +160,21 @@ export function loadConfig(
       const message = e instanceof Error ? e.message : String(e);
       throw new Error(`Failed to parse config at ${configPath}: ${message}`, { cause: e });
     }
+    if (
+      fileConfig.auth?.allowedUserId !== undefined &&
+      (typeof fileConfig.auth.allowedUserId !== "number" ||
+        !Number.isInteger(fileConfig.auth.allowedUserId) ||
+        fileConfig.auth.allowedUserId <= 0)
+    ) {
+      throw new Error(
+        `Invalid allowedUserId in config at ${configPath}: must be a positive integer`,
+      );
+    }
     // Considered first run if publicDomain or auth is missing/incomplete
     if (
       fileConfig.publicDomain &&
       fileConfig.auth?.githubClientId &&
-      fileConfig.auth?.allowedUsername
+      (fileConfig.auth?.allowedUsername || fileConfig.auth?.allowedUserId)
     ) {
       isFirstRun = false;
     }

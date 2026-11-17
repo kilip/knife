@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  authorizeGitHubUser,
   consumeSetupToken,
   createSessionToken,
   generateSetupToken,
@@ -50,5 +51,36 @@ describe("Auth & Setup Token", () => {
     // Fails after session revocation
     revokeSession(verified!.sid);
     expect(verifySessionToken(token, secret)).toBeNull();
+  });
+
+  it("authorizes GitHub user by numeric allowedUserId and rejects matching login with wrong id", () => {
+    const authConfig = {
+      githubClientId: "cid",
+      githubClientSecret: "csecret",
+      allowedUsername: "octocat",
+      allowedUserId: 12345,
+    };
+
+    // Matching login but non-matching numeric ID must be rejected
+    const wrongIdResult = authorizeGitHubUser({ id: 99999, login: "octocat" }, authConfig);
+    expect(wrongIdResult.authorized).toBe(false);
+
+    // Matching numeric ID is authorized
+    const okResult = authorizeGitHubUser({ id: 12345, login: "renamed-octocat" }, authConfig);
+    expect(okResult).toEqual({ authorized: true });
+  });
+
+  it("pins allowedUserId on first valid login for legacy allowedUsername-only config", () => {
+    const legacyConfig = {
+      githubClientId: "cid",
+      githubClientSecret: "csecret",
+      allowedUsername: "octocat",
+    };
+
+    const mismatch = authorizeGitHubUser({ id: 777, login: "someone-else" }, legacyConfig);
+    expect(mismatch.authorized).toBe(false);
+
+    const match = authorizeGitHubUser({ id: 4242, login: "OctoCat" }, legacyConfig);
+    expect(match).toEqual({ authorized: true, pinUserId: 4242 });
   });
 });

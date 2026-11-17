@@ -192,9 +192,57 @@ export async function exchangeGitHubCode(
   return { accessToken: data.access_token };
 }
 
-export async function fetchGitHubUser(
-  accessToken: string,
-): Promise<{ login: string; name?: string; avatarUrl?: string } | null> {
+export interface GitHubUser {
+  id: number;
+  login: string;
+  name?: string;
+  avatarUrl?: string;
+}
+
+export type GitHubAuthResult =
+  | { authorized: true; pinUserId?: number }
+  | { authorized: false; reason: string };
+
+export function authorizeGitHubUser(
+  user: Pick<GitHubUser, "id" | "login">,
+  auth?: KnifeConfig["auth"],
+): GitHubAuthResult {
+  if (!auth) {
+    return { authorized: false, reason: "Missing auth configuration" };
+  }
+  if (typeof user.id !== "number" || !Number.isInteger(user.id) || user.id <= 0) {
+    return { authorized: false, reason: "Invalid GitHub user ID" };
+  }
+
+  if (auth.allowedUserId !== undefined) {
+    if (
+      typeof auth.allowedUserId !== "number" ||
+      !Number.isInteger(auth.allowedUserId) ||
+      auth.allowedUserId <= 0
+    ) {
+      return { authorized: false, reason: "Invalid configured allowedUserId" };
+    }
+    if (user.id !== auth.allowedUserId) {
+      return {
+        authorized: false,
+        reason: `GitHub user ID ${user.id} ('${user.login}') does not match allowedUserId ${auth.allowedUserId}`,
+      };
+    }
+    return { authorized: true };
+  }
+
+  const allowed = auth.allowedUsername?.trim().toLowerCase();
+  if (!allowed || user.login.toLowerCase() !== allowed) {
+    return {
+      authorized: false,
+      reason: `GitHub user '${user.login}' (${user.id}) does not match allowed '${allowed}'`,
+    };
+  }
+
+  return { authorized: true, pinUserId: user.id };
+}
+
+export async function fetchGitHubUser(accessToken: string): Promise<GitHubUser | null> {
   const res = await fetch("https://api.github.com/user", {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -208,8 +256,25 @@ export async function fetchGitHubUser(
     return null;
   }
 
-  const data = (await res.json()) as { login: string; name?: string; avatar_url?: string };
+  const data = (await res.json()) as {
+    id?: number;
+    login?: string;
+    name?: string;
+    avatar_url?: string;
+  };
+  if (
+    typeof data.id !== "number" ||
+    !Number.isInteger(data.id) ||
+    data.id <= 0 ||
+    typeof data.login !== "string" ||
+    data.login.length === 0
+  ) {
+    console.error("GitHub user response missing valid numeric id or login");
+    return null;
+  }
+
   return {
+    id: data.id,
     login: data.login,
     name: data.name,
     avatarUrl: data.avatar_url,

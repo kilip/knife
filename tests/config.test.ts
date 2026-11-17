@@ -181,6 +181,7 @@ describe("Server Config & CLI Parser", () => {
           githubClientId: "client-id",
           githubClientSecret: "client-secret",
           allowedUsername: "kilip",
+          allowedUserId: 123456,
         },
         sessionSecret: "super-secret-value",
       };
@@ -193,6 +194,7 @@ describe("Server Config & CLI Parser", () => {
 
       const loaded = loadConfig({ configPath });
       expect(loaded.isFirstRun).toBe(false);
+      expect(loaded.config.auth?.allowedUserId).toBe(123456);
       expect(loaded.config.sessionSecret).toBe("super-secret-value");
 
       // Overwriting an existing config also leaves no temp files

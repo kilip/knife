@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync } fr
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { THEME_MAP } from "../app/utils/themes";
 import {
+  authorizeGitHubUser,
   consumeSetupToken,
   createSessionCookieHeader,
   createSessionToken,
@@ -319,6 +320,7 @@ try {
             githubClientId?: string;
             githubClientSecret?: string;
             allowedUsername?: string;
+            allowedUserId?: number;
             theme?: string;
             trustedProxies?: string[];
           };
@@ -362,6 +364,18 @@ try {
             );
           }
 
+          if (
+            body.allowedUserId !== undefined &&
+            (typeof body.allowedUserId !== "number" ||
+              !Number.isInteger(body.allowedUserId) ||
+              body.allowedUserId <= 0)
+          ) {
+            return Response.json(
+              { error: "Allowed GitHub user ID must be a positive integer." },
+              { status: 400, headers: secHeaders },
+            );
+          }
+
           // Clean up domain (remove leading protocol if entered by user)
           const cleanDomain = body.publicDomain
             .trim()
@@ -380,6 +394,7 @@ try {
             githubClientId: body.githubClientId.trim(),
             githubClientSecret: body.githubClientSecret.trim(),
             allowedUsername: body.allowedUsername.trim(),
+            ...(body.allowedUserId !== undefined ? { allowedUserId: body.allowedUserId } : {}),
           };
 
           // Save config to disk
@@ -468,15 +483,18 @@ try {
           });
         }
 
-        const allowed = config.auth?.allowedUsername?.toLowerCase();
-        if (!allowed || user.login.toLowerCase() !== allowed) {
-          console.warn(
-            `[auth] Unauthorized login attempt: github user '${user.login}', allowed '${allowed}'`,
-          );
+        const authResult = authorizeGitHubUser(user, config.auth);
+        if (!authResult.authorized) {
+          console.warn(`[auth] Unauthorized login attempt: ${authResult.reason}`);
           return new Response(
             `Access Denied: GitHub user '${user.login}' is not authorized to access this knife instance.`,
             { status: 403, headers: secHeaders },
           );
+        }
+
+        if (authResult.pinUserId !== undefined && config.auth) {
+          config.auth.allowedUserId = authResult.pinUserId;
+          saveConfig(config, configPath);
         }
 
         // Create authenticated session
