@@ -111,17 +111,21 @@ describe("Knife End-to-End System Tests", () => {
     expect(capturedStderr).not.toContain("SECRET");
   });
 
-  it("serves health check and public config", async () => {
-    const res = await fetch(`http://127.0.0.1:${testPort}/health`);
-    expect(res.status).toBe(200);
-    const data = (await res.json()) as { status: string; isFirstRun: boolean };
-    expect(data.status).toBe("ok");
-    expect(data.isFirstRun).toBe(true);
+  it("serves health check and public config without sensitive fields in first-run mode", async () => {
+    for (const healthPath of ["/health", "/api/health"]) {
+      const res = await fetch(`http://127.0.0.1:${testPort}${healthPath}`);
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as Record<string, unknown>;
+      expect(data).toEqual({ status: "ok" });
+      expect(data.isFirstRun).toBeUndefined();
+      expect(data.allowedUsername).toBeUndefined();
+    }
 
     const pubRes = await fetch(`http://127.0.0.1:${testPort}/api/config/public`);
     expect(pubRes.status).toBe(200);
-    const pubData = (await pubRes.json()) as { isFirstRun: boolean };
-    expect(pubData.isFirstRun).toBe(true);
+    const pubData = (await pubRes.json()) as Record<string, unknown>;
+    expect(pubData.isFirstRun).toBeUndefined();
+    expect(pubData.allowedUsername).toBeUndefined();
   });
 
   it("redirects GET / and non-/setup paths to /setup without leaking setup token", async () => {
@@ -223,6 +227,15 @@ describe("Knife End-to-End System Tests", () => {
       }),
     });
     expect(repeatRes.status).toBe(400);
+
+    // Verify public config and health endpoints do not expose sensitive fields after setup
+    const pubRes = await fetch(`http://127.0.0.1:${testPort}/api/config/public`);
+    expect(pubRes.status).toBe(200);
+    const pubData = (await pubRes.json()) as Record<string, unknown>;
+    expect(pubData.isFirstRun).toBeUndefined();
+    expect(pubData.allowedUsername).toBeUndefined();
+    expect(pubData.publicDomain).toBe("knife.test.local");
+    expect(pubData.theme).toBe("tokyo-night");
   });
 
   it("rejects unauthenticated WS upgrade to /ws/terminal with 401 in configured mode", async () => {

@@ -292,28 +292,19 @@ try {
 
       // 2. Health check endpoint
       if (url.pathname === "/health" || url.pathname === "/api/health") {
-        return Response.json(
-          {
-            status: "ok",
-            isFirstRun,
-            version: getCurrentVersion(),
-          },
-          { headers: secHeaders },
-        );
+        return Response.json({ status: "ok" }, { headers: secHeaders });
       }
 
-      // 3. Public config endpoint (used by frontend to get domain, theme, setup status)
+      // 3. Public config endpoint (used by frontend to get domain, theme, callback URL)
       if (url.pathname === "/api/config/public") {
         return Response.json(
           {
             publicDomain: config.publicDomain,
             publicScheme: config.publicScheme,
             theme: config.theme,
-            isFirstRun,
             callbackUrl: config.publicDomain
               ? `${getPublicOrigin(config)}/auth/github/callback`
               : `https://<your-public-domain>/auth/github/callback`,
-            allowedUsername: config.auth?.allowedUsername || null,
           },
           { headers: secHeaders },
         );
