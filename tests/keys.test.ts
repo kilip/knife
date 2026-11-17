@@ -64,8 +64,11 @@ describe("QuickKeysBar & Terminal Keyboard Helpers", () => {
     );
     expect(fileBrowserPanel).toContain("Close sidebar (Ctrl+E)");
 
-    const home = readFileSync(join(process.cwd(), "app/routes/home.tsx"), "utf8");
-    expect(home).toContain('e.key === "e" || e.key === "E"');
+    const shortcuts = readFileSync(
+      join(process.cwd(), "app/hooks/useKeyboardShortcuts.ts"),
+      "utf8",
+    );
+    expect(shortcuts).toContain('e.key === "e" || e.key === "E"');
 
     const terminalTab = readFileSync(join(process.cwd(), "app/components/TerminalTab.tsx"), "utf8");
     expect(terminalTab).toMatch(/e\.key === "e"\s*\|\|\s*e\.key === "E"/);

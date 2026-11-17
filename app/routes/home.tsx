@@ -1,7 +1,5 @@
-import type { MeResponse, TabCwdResponse } from "@shared/api";
-import type { TabData } from "@shared/tabs";
 import { Plus } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { ConfirmModal } from "~/components/ConfirmModal";
 import { FileBrowserPanel } from "~/components/FileBrowser/FileBrowserPanel";
@@ -11,39 +9,41 @@ import { PwaUpdateToast } from "~/components/PwaUpdateToast";
 import { QuickKeysBar } from "~/components/QuickKeysBar";
 import { SelfUpdateModal } from "~/components/SelfUpdateModal";
 import { TabBar } from "~/components/TabBar";
-import { type ConnectionStatus, type TerminalActions, TerminalTab } from "~/components/TerminalTab";
+import { TerminalTab } from "~/components/TerminalTab";
 import { useFileTransfer } from "~/hooks/useFileTransfer";
+import { useKeyboardShortcuts } from "~/hooks/useKeyboardShortcuts";
 import { usePwa } from "~/hooks/usePwa";
 import { useSelfUpdate } from "~/hooks/useSelfUpdate";
 import { useSettings } from "~/hooks/useSettings";
-import { ApiError, api } from "~/lib/api";
+import { useTabCwd } from "~/hooks/useTabCwd";
+import { useTabs } from "~/hooks/useTabs";
+import { useTheme } from "~/hooks/useTheme";
 import { STORAGE_KEYS, usePersistentState } from "~/lib/use-persistent-state";
-import { getTopLevelDir } from "~/utils/cwd";
-import { getTheme, type KnifeTheme } from "~/utils/themes";
 
 export default function Home() {
-  const [tabs, setTabs] = useState<TabData[]>([]);
-  const [activeTabId, setActiveTabId] = useState<string>("");
-  const [statuses, setStatuses] = useState<Record<string, ConnectionStatus>>({});
   const navigate = useNavigate();
   const { settings, updateSettings } = useSettings();
-  const theme = getTheme(settings.theme);
-  const [username, setUsername] = useState<string>("");
-  const [shellName, setShellName] = useState<string>("Shell");
-  const [tabToClose, setTabToClose] = useState<TabData | null>(null);
-  const customTabsRef = useRef<Set<string>>(new Set());
-  const closingTabsRef = useRef<Set<string>>(new Set());
-  const fontSize = settings.fontSize;
+  const { theme, username, shellName, handleSelectTheme } = useTheme({
+    themeId: settings.theme,
+    updateSettings,
+  });
+  const tabState = useTabs(shellName);
+
+  const { getActiveTabCwd } = useTabCwd({
+    activeTabId: tabState.activeTabId,
+    onCwdFolder: tabState.setTabTitleFromCwd,
+  });
+  const { transfers, uploadFiles, downloadFile, downloadArchive, cancelTransfer, clearCompleted } =
+    useFileTransfer();
+  const selfUpdate = useSelfUpdate();
+  const { isInstallable, installApp, isUpdateAvailable, updateApp, dismissUpdate, isOnline } =
+    usePwa();
+
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isFileBrowserOpen, setIsFileBrowserOpen] = usePersistentState<boolean>(
     STORAGE_KEYS.FILE_BROWSER_OPEN,
     false,
   );
-
-  const handleToggleFileBrowser = useCallback(() => {
-    setIsFileBrowserOpen((prev) => !prev);
-  }, [setIsFileBrowserOpen]);
-
   const [isQuickKeysBarOpen, setIsQuickKeysBarOpen] = usePersistentState<boolean>(
     STORAGE_KEYS.QUICK_KEYS_OPEN,
     () =>
@@ -51,131 +51,10 @@ export default function Home() {
       window.matchMedia("(max-width: 768px), (pointer: coarse)").matches,
   );
 
-  const handleToggleQuickKeys = useCallback(() => {
-    setIsQuickKeysBarOpen((prev) => !prev);
-  }, [setIsQuickKeysBarOpen]);
-
-  const terminalActionsRef = useRef<Map<string, TerminalActions>>(new Map());
-
-  const handleRegisterTerminalActions = useCallback(
-    (tabId: string, actions: TerminalActions | null) => {
-      if (actions) {
-        terminalActionsRef.current.set(tabId, actions);
-      } else {
-        terminalActionsRef.current.delete(tabId);
-      }
-    },
-    [],
-  );
-
-  const handleInsertTerminalPath = useCallback(
-    (path: string) => {
-      if (activeTabId) {
-        const actions = terminalActionsRef.current.get(activeTabId);
-        actions?.sendInput(path);
-      }
-    },
-    [activeTabId],
-  );
-
-  const handleEsc = useCallback(() => {
-    if (activeTabId) {
-      const actions = terminalActionsRef.current.get(activeTabId);
-      actions?.sendInput("\x1b");
-      actions?.focus();
-    }
-  }, [activeTabId]);
-
-  const handleTabKey = useCallback(() => {
-    if (activeTabId) {
-      const actions = terminalActionsRef.current.get(activeTabId);
-      actions?.sendInput("\t");
-      actions?.focus();
-    }
-  }, [activeTabId]);
-
-  const handleCtrlC = useCallback(() => {
-    if (activeTabId) {
-      const actions = terminalActionsRef.current.get(activeTabId);
-      if (!actions) return;
-      if (actions.hasSelection()) {
-        const selected = actions.getSelection();
-        if (selected) {
-          navigator.clipboard?.writeText(selected).catch(() => {});
-          actions.clearSelection();
-        }
-      } else {
-        actions.sendInput("\x03");
-      }
-      actions.focus();
-    }
-  }, [activeTabId]);
-
-  const handleCtrlV = useCallback(async () => {
-    if (activeTabId) {
-      const actions = terminalActionsRef.current.get(activeTabId);
-      if (!actions) return;
-      try {
-        const text = await navigator.clipboard?.readText();
-        if (text) {
-          actions.sendInput(text);
-        }
-      } catch {}
-      actions.focus();
-    }
-  }, [activeTabId]);
-
-  const handleArrowUp = useCallback(() => {
-    if (activeTabId) {
-      const actions = terminalActionsRef.current.get(activeTabId);
-      actions?.sendInput("\x1b[A");
-      actions?.focus();
-    }
-  }, [activeTabId]);
-
-  const handleArrowDown = useCallback(() => {
-    if (activeTabId) {
-      const actions = terminalActionsRef.current.get(activeTabId);
-      actions?.sendInput("\x1b[B");
-      actions?.focus();
-    }
-  }, [activeTabId]);
-  const { transfers, uploadFiles, downloadFile, downloadArchive, cancelTransfer, clearCompleted } =
-    useFileTransfer();
-  const {
-    status: selfUpdateStatus,
-    updateInfo,
-    logs: selfUpdateLogs,
-    error: selfUpdateError,
-    remediationCommand,
-    isModalOpen: isSelfUpdateModalOpen,
-    reconnectCountdown,
-    checkForUpdate,
-    applyUpdate,
-    openModal: openSelfUpdateModal,
-    closeModal: closeSelfUpdateModal,
-  } = useSelfUpdate();
-
-  const handleUploadToActiveTabCwd = useCallback(
-    async (files: File[]) => {
-      if (!activeTabId) return;
-      try {
-        const data = await api.get<TabCwdResponse>(`/api/tabs/${activeTabId}/cwd`);
-        uploadFiles(data.cwd || "", files);
-      } catch {
-        uploadFiles("", files);
-      }
-    },
-    [activeTabId, uploadFiles],
-  );
-  const { isInstallable, installApp, isUpdateAvailable, updateApp, dismissUpdate, isOnline } =
-    usePwa();
   useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement));
-    };
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    const onFsChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
   }, []);
 
   const handleToggleFullscreen = useCallback(() => {
@@ -186,396 +65,99 @@ export default function Home() {
     }
   }, []);
 
-  const handleIncreaseFontSize = useCallback(() => {
-    updateSettings({ fontSize: Math.min(32, settings.fontSize + 1) });
-  }, [settings.fontSize, updateSettings]);
-
-  const handleDecreaseFontSize = useCallback(() => {
-    updateSettings({ fontSize: Math.max(10, settings.fontSize - 1) });
-  }, [settings.fontSize, updateSettings]);
-
-  const handleResetFontSize = useCallback(() => {
-    updateSettings({ fontSize: 15 });
-  }, [updateSettings]);
-
-  const handleSelectTheme = useCallback(
-    (themeId: string) => {
-      updateSettings({ theme: themeId });
-    },
-    [updateSettings],
+  const handleToggleFileBrowser = useCallback(
+    () => setIsFileBrowserOpen((prev) => !prev),
+    [setIsFileBrowserOpen],
+  );
+  const handleToggleQuickKeys = useCallback(
+    () => setIsQuickKeysBarOpen((prev) => !prev),
+    [setIsQuickKeysBarOpen],
+  );
+  const handleIncreaseFontSize = useCallback(
+    () => updateSettings({ fontSize: Math.min(32, settings.fontSize + 1) }),
+    [settings.fontSize, updateSettings],
+  );
+  const handleDecreaseFontSize = useCallback(
+    () => updateSettings({ fontSize: Math.max(10, settings.fontSize - 1) }),
+    [settings.fontSize, updateSettings],
+  );
+  const handleResetFontSize = useCallback(() => updateSettings({ fontSize: 15 }), [updateSettings]);
+  const handleUploadToActiveTabCwd = useCallback(
+    async (files: File[]) => uploadFiles(await getActiveTabCwd(), files),
+    [getActiveTabCwd, uploadFiles],
   );
 
-  // Fetch initial tabs and user profile
-  useEffect(() => {
-    // Fetch user
-    api
-      .get<MeResponse>("/api/me")
-      .then((data) => {
-        if (data?.authenticated && data.username) {
-          setUsername(data.username);
-          if (data.shellName) {
-            setShellName(data.shellName);
-          }
-        }
-      })
-      .catch((err) => {
-        if (err instanceof ApiError && err.status === 401) {
-          window.location.href = "/login";
-        }
-      });
-
-    // Fetch tabs
-    api
-      .get<TabData[]>("/api/tabs")
-      .then((data) => {
-        if (Array.isArray(data)) {
-          setTabs(data);
-          if (data.length > 0) {
-            setActiveTabId(data[0].id);
-            for (const tab of data) {
-              api
-                .get<TabCwdResponse>(`/api/tabs/${tab.id}/cwd`)
-                .then((d) => {
-                  if (d?.cwd) {
-                    const top = getTopLevelDir(d.cwd);
-                    setTabs((prev) =>
-                      prev.map((t) =>
-                        t.id === tab.id && !customTabsRef.current.has(t.id)
-                          ? { ...t, name: top }
-                          : t,
-                      ),
-                    );
-                  }
-                })
-                .catch(() => {});
-            }
-          }
-        }
-      })
-      .catch((err) => {
-        if (err instanceof ApiError && err.status === 401) {
-          window.location.href = "/login";
-        }
-      });
-  }, []);
-
-  // Sync active tab title with CWD top-level folder
-  useEffect(() => {
-    if (!activeTabId) return;
-
-    const syncCwd = async () => {
-      try {
-        const data = await api.get<TabCwdResponse>(`/api/tabs/${activeTabId}/cwd`);
-        if (!data?.cwd) return;
-
-        const topLevel = getTopLevelDir(data.cwd);
-        setTabs((prev) =>
-          prev.map((t) => {
-            if (t.id !== activeTabId) return t;
-            if (customTabsRef.current.has(t.id)) return t;
-            if (t.name === topLevel) return t;
-            return { ...t, name: topLevel };
-          }),
-        );
-      } catch {}
-    };
-
-    syncCwd();
-    const interval = setInterval(syncCwd, 2000);
-    return () => clearInterval(interval);
-  }, [activeTabId]);
-
-  // Create new tab
-  const handleCreateTab = useCallback(() => {
-    const nextIndex = tabs.length + 1;
-    api
-      .post<TabData>("/api/tabs", { name: `${shellName} ${nextIndex}` })
-      .then((newTab) => {
-        if (newTab && newTab.id) {
-          customTabsRef.current.delete(newTab.id);
-          setTabs((prev) => [...prev, newTab]);
-          setActiveTabId(newTab.id);
-        }
-      })
-      .catch((err) => console.error("Failed to create tab:", err));
-  }, [tabs.length, shellName]);
-
-  // Request tab close (opens confirmation modal)
-  const handleRequestCloseTab = useCallback(
-    (id: string) => {
-      const tab = tabs.find((t) => t.id === id);
-      if (tab) {
-        setTabToClose(tab);
-      }
-    },
-    [tabs],
-  );
-
-  // Execute tab close
-  const executeCloseTab = useCallback(
-    (closedId: string) => {
-      if (closingTabsRef.current.has(closedId)) return;
-      closingTabsRef.current.add(closedId);
-
-      customTabsRef.current.delete(closedId);
-      terminalActionsRef.current.delete(closedId);
-      setTabToClose((prev) => (prev?.id === closedId ? null : prev));
-
-      // Calculate adjacent active tab before deletion
-      let nextActiveId = activeTabId;
-      if (activeTabId === closedId) {
-        const index = tabs.findIndex((t) => t.id === closedId);
-        if (index > 0) {
-          nextActiveId = tabs[index - 1].id;
-        } else if (tabs.length > 1) {
-          nextActiveId = tabs[1].id;
-        } else {
-          nextActiveId = "";
-        }
-      }
-
-      api
-        .delete<{ remainingTabs?: TabData[] }>(`/api/tabs/${closedId}`)
-        .then((data) => {
-          if (Array.isArray(data.remainingTabs)) {
-            setTabs(data.remainingTabs);
-            if (activeTabId === closedId) {
-              const exists = data.remainingTabs.some((t: TabData) => t.id === nextActiveId);
-              setActiveTabId(exists ? nextActiveId : data.remainingTabs[0]?.id || "");
-            }
-          } else {
-            setTabs((prev) => {
-              const next = prev.filter((t) => t.id !== closedId);
-              if (activeTabId === closedId) {
-                const exists = next.some((t) => t.id === nextActiveId);
-                setActiveTabId(exists ? nextActiveId : next[0]?.id || "");
-              }
-              return next;
-            });
-          }
-        })
-        .catch((err) => console.error("Failed to delete tab:", err))
-        .finally(() => {
-          closingTabsRef.current.delete(closedId);
-        });
-    },
-    [activeTabId, tabs],
-  );
-
-  // Confirm tab close
-  const handleConfirmCloseTab = () => {
-    if (!tabToClose) return;
-    executeCloseTab(tabToClose.id);
-  };
-
-  const handleProcessExit = useCallback(
-    (tabId: string) => {
-      executeCloseTab(tabId);
-    },
-    [executeCloseTab],
-  );
-
-  // Rename tab
-  const handleRenameTab = (id: string, newName: string) => {
-    customTabsRef.current.add(id);
-    api
-      .patch<TabData>(`/api/tabs/${id}`, { name: newName })
-      .then((updated) => {
-        setTabs((prev) =>
-          prev.map((t) => (t.id === id ? { ...t, name: updated.name || newName } : t)),
-        );
-      })
-      .catch((err) => console.error("Failed to rename tab:", err));
-  };
-
-  // Reorder tabs
-  const handleReorderTabs = (newTabs: TabData[]) => {
-    setTabs(newTabs);
-    api
-      .post("/api/tabs/reorder", { tabIds: newTabs.map((t) => t.id) })
-      .catch((err) => console.error("Failed to reorder tabs:", err));
-  };
-
-  // Logout
-  const handleLogout = () => {
-    window.location.href = "/auth/logout";
-  };
-
-  // Global Keyboard Shortcuts
-  // biome-ignore lint/correctness/useExhaustiveDependencies: keyboard shortcut handlers are intentionally bound to tab/font state
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if user is typing in a form input/textarea (exempt xterm hidden helper textarea)
-      const activeEl = document.activeElement;
-      const isXtermHelper = activeEl?.classList.contains("xterm-helper-textarea");
-      if ((activeEl?.tagName === "INPUT" || activeEl?.tagName === "TEXTAREA") && !isXtermHelper) {
-        return;
-      }
-
-      // Alt + F: Toggle fullscreen
-      if (e.altKey && !e.shiftKey && (e.key === "f" || e.key === "F")) {
-        e.preventDefault();
-        handleToggleFullscreen();
-        return;
-      }
-      // Ctrl/Cmd + E: Toggle File Browser
-      if ((e.ctrlKey || e.metaKey) && (e.key === "e" || e.key === "E")) {
-        e.preventDefault();
-        handleToggleFileBrowser();
-        return;
-      }
-
-      // Ctrl/Cmd + + / =: Increase font size
-      if ((e.ctrlKey || e.metaKey) && (e.key === "=" || e.key === "+")) {
-        e.preventDefault();
-        handleIncreaseFontSize();
-        return;
-      }
-
-      // Ctrl/Cmd + -: Decrease font size
-      if ((e.ctrlKey || e.metaKey) && e.key === "-") {
-        e.preventDefault();
-        handleDecreaseFontSize();
-        return;
-      }
-
-      // Ctrl/Cmd + 0: Reset font size
-      if ((e.ctrlKey || e.metaKey) && e.key === "0") {
-        e.preventDefault();
-        handleResetFontSize();
-        return;
-      }
-
-      // Cmd/Ctrl + ,: Open Settings
-      if ((e.ctrlKey || e.metaKey) && e.key === ",") {
-        e.preventDefault();
-        navigate("/settings");
-        return;
-      }
-
-      // Alt + T: New tab
-      if (e.altKey && !e.shiftKey && (e.key === "t" || e.key === "T")) {
-        e.preventDefault();
-        handleCreateTab();
-        return;
-      }
-
-      // Alt + W: Close active tab
-      if (e.altKey && !e.shiftKey && (e.key === "w" || e.key === "W")) {
-        e.preventDefault();
-        if (activeTabId) {
-          handleRequestCloseTab(activeTabId);
-        }
-        return;
-      }
-
-      // Alt + 1..9: Switch tab
-      if (e.altKey && !e.shiftKey && /^[1-9]$/.test(e.key)) {
-        e.preventDefault();
-        const index = parseInt(e.key, 10) - 1;
-        if (index >= 0 && index < tabs.length) {
-          setActiveTabId(tabs[index].id);
-        }
-        return;
-      }
-
-      // Alt + Left / Right: Previous / Next tab
-      if (e.altKey && !e.shiftKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
-        e.preventDefault();
-        const currentIndex = tabs.findIndex((t) => t.id === activeTabId);
-        if (currentIndex === -1) return;
-        const delta = e.key === "ArrowLeft" ? -1 : 1;
-        const nextIndex = (currentIndex + delta + tabs.length) % tabs.length;
-        setActiveTabId(tabs[nextIndex].id);
-        return;
-      }
-
-      // Alt + Shift + Left / Right: Move tab left / right
-      if (e.altKey && e.shiftKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
-        e.preventDefault();
-        const currentIndex = tabs.findIndex((t) => t.id === activeTabId);
-        if (currentIndex === -1) return;
-        const targetIndex = e.key === "ArrowLeft" ? currentIndex - 1 : currentIndex + 1;
-        if (targetIndex >= 0 && targetIndex < tabs.length) {
-          const newTabs = [...tabs];
-          const [moved] = newTabs.splice(currentIndex, 1);
-          newTabs.splice(targetIndex, 0, moved);
-          handleReorderTabs(newTabs);
-        }
-        return;
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [
-    tabs,
-    activeTabId,
-    handleCreateTab,
-    handleRequestCloseTab,
-    handleToggleFullscreen,
-    handleIncreaseFontSize,
-    handleDecreaseFontSize,
-    handleResetFontSize,
-    handleToggleFileBrowser,
-  ]);
+  useKeyboardShortcuts({
+    activeTabId: tabState.activeTabId,
+    onCreateTab: tabState.handleCreateTab,
+    onRequestCloseTab: tabState.handleRequestCloseTab,
+    onSelectTabByIndex: tabState.handleSelectTabByIndex,
+    onCycleTab: tabState.handleCycleTab,
+    onMoveTab: tabState.handleMoveTab,
+    onToggleFullscreen: handleToggleFullscreen,
+    onToggleFileBrowser: handleToggleFileBrowser,
+    onIncreaseFontSize: handleIncreaseFontSize,
+    onDecreaseFontSize: handleDecreaseFontSize,
+    onResetFontSize: handleResetFontSize,
+    onOpenSettings: useCallback(() => navigate("/settings"), [navigate]),
+  });
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[var(--bg-base)]">
       {!isOnline && <PwaOfflineBanner />}
-      {/* Top Tab Bar */}
       <TabBar
-        tabs={tabs}
-        activeTabId={activeTabId}
-        statuses={statuses}
+        tabs={tabState.tabs}
+        activeTabId={tabState.activeTabId}
+        statuses={tabState.statuses}
         theme={theme}
         compact={settings.compactTabs}
-        fontSize={fontSize}
+        fontSize={settings.fontSize}
         onIncreaseFontSize={handleIncreaseFontSize}
         onDecreaseFontSize={handleDecreaseFontSize}
         onResetFontSize={handleResetFontSize}
         isFullscreen={isFullscreen}
         onToggleFullscreen={handleToggleFullscreen}
         username={username}
-        onSelectTab={setActiveTabId}
-        onCreateTab={handleCreateTab}
-        onCloseTab={handleRequestCloseTab}
-        onRenameTab={handleRenameTab}
-        onReorderTabs={handleReorderTabs}
+        onSelectTab={tabState.setActiveTabId}
+        onCreateTab={tabState.handleCreateTab}
+        onCloseTab={tabState.handleRequestCloseTab}
+        onRenameTab={tabState.handleRenameTab}
+        onReorderTabs={tabState.handleReorderTabs}
         onSelectTheme={handleSelectTheme}
-        onLogout={handleLogout}
+        onLogout={() => {
+          window.location.href = "/auth/logout";
+        }}
         isInstallable={isInstallable}
         onInstallApp={installApp}
         isFileBrowserOpen={isFileBrowserOpen}
         onToggleFileBrowser={handleToggleFileBrowser}
         isQuickKeysOpen={isQuickKeysBarOpen}
         onToggleQuickKeys={handleToggleQuickKeys}
-        updateAvailable={updateInfo?.updateAvailable}
-        latestVersion={updateInfo?.latestVersion}
-        onOpenUpdateModal={openSelfUpdateModal}
+        updateAvailable={selfUpdate.updateInfo?.updateAvailable}
+        latestVersion={selfUpdate.updateInfo?.latestVersion}
+        onOpenUpdateModal={selfUpdate.openModal}
       />
-      {/* Main Workspace: Split pane / Drawer + Terminal Viewport */}
+
       <div className="flex-1 flex min-h-0 relative overflow-hidden">
         <FileBrowserPanel
           isOpen={isFileBrowserOpen}
           onClose={() => setIsFileBrowserOpen(false)}
-          activeTabId={activeTabId}
-          onInsertTerminalPath={handleInsertTerminalPath}
+          activeTabId={tabState.activeTabId}
+          onInsertTerminalPath={tabState.handleInsertTerminalPath}
           onUpload={uploadFiles}
           onDownloadFile={downloadFile}
           onDownloadArchive={downloadArchive}
         />
 
-        {/* Terminal Viewport Container */}
         <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
           <main className="flex-1 relative overflow-hidden">
-            {tabs.map((tab) => (
+            {tabState.tabs.map((tab) => (
               <TerminalTab
                 key={tab.id}
                 tabId={tab.id}
-                isActive={tab.id === activeTabId}
+                isActive={tab.id === tabState.activeTabId}
                 theme={theme}
-                fontSize={fontSize}
+                fontSize={settings.fontSize}
                 fontFamily={settings.fontFamily}
                 lineHeight={settings.lineHeight}
                 cursorStyle={settings.cursorStyle}
@@ -583,21 +165,19 @@ export default function Home() {
                 scrollback={settings.scrollback}
                 copyOnSelect={settings.copyOnSelect}
                 bellStyle={settings.bellStyle}
-                onProcessExit={handleProcessExit}
-                onStatusChange={(status) => {
-                  setStatuses((prev) => ({ ...prev, [tab.id]: status }));
-                }}
+                onProcessExit={tabState.handleProcessExit}
+                onStatusChange={(status) => tabState.setTabStatus(tab.id, status)}
                 onUploadToCwd={handleUploadToActiveTabCwd}
-                onRegisterActions={handleRegisterTerminalActions}
+                onRegisterActions={tabState.handleRegisterTerminalActions}
               />
             ))}
 
-            {tabs.length === 0 && (
+            {tabState.tabs.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full gap-3 text-[var(--fg-muted)]">
                 <p className="text-sm">No active tabs</p>
                 <button
                   type="button"
-                  onClick={handleCreateTab}
+                  onClick={tabState.handleCreateTab}
                   className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium rounded-lg bg-[var(--accent)] text-[var(--bg-base)] hover:opacity-90 transition-opacity cursor-pointer shadow-sm"
                 >
                   <Plus className="w-4 h-4" />
@@ -607,51 +187,48 @@ export default function Home() {
             )}
           </main>
 
-          {isQuickKeysBarOpen && tabs.length > 0 && (
+          {isQuickKeysBarOpen && tabState.tabs.length > 0 && (
             <QuickKeysBar
-              onEsc={handleEsc}
-              onTab={handleTabKey}
-              onCtrlC={handleCtrlC}
-              onCtrlV={handleCtrlV}
-              onArrowUp={handleArrowUp}
-              onArrowDown={handleArrowDown}
+              onEsc={() => tabState.sendQuickKey("\x1b")}
+              onTab={() => tabState.sendQuickKey("\t")}
+              onCtrlC={tabState.handleCtrlC}
+              onCtrlV={tabState.handleCtrlV}
+              onArrowUp={() => tabState.sendQuickKey("\x1b[A")}
+              onArrowDown={() => tabState.sendQuickKey("\x1b[B")}
               onClose={() => setIsQuickKeysBarOpen(false)}
             />
           )}
         </div>
       </div>
 
-      {/* Floating Transfer Queue Drawer */}
       <TransferQueueDrawer
         transfers={transfers}
         onCancel={cancelTransfer}
         onClearCompleted={clearCompleted}
       />
 
-      {/* Close Tab Confirmation Modal */}
       <ConfirmModal
-        isOpen={Boolean(tabToClose)}
+        isOpen={Boolean(tabState.tabToClose)}
         title="Close Terminal Tab"
-        message={`Are you sure you want to close "${tabToClose?.name}"? Any running shell processes inside this tab will be terminated.`}
+        message={`Are you sure you want to close "${tabState.tabToClose?.name}"? Any running shell processes inside this tab will be terminated.`}
         confirmText="Close Tab"
         cancelText="Cancel"
-        onConfirm={handleConfirmCloseTab}
-        onCancel={() => setTabToClose(null)}
+        onConfirm={tabState.handleConfirmCloseTab}
+        onCancel={() => tabState.setTabToClose(null)}
       />
 
       {isUpdateAvailable && <PwaUpdateToast onUpdate={updateApp} onDismiss={dismissUpdate} />}
-      {/* Host Daemon Self-Update Modal */}
       <SelfUpdateModal
-        isOpen={isSelfUpdateModalOpen}
-        status={selfUpdateStatus}
-        updateInfo={updateInfo}
-        logs={selfUpdateLogs}
-        error={selfUpdateError}
-        remediationCommand={remediationCommand}
-        reconnectCountdown={reconnectCountdown}
-        onClose={closeSelfUpdateModal}
-        onApplyUpdate={applyUpdate}
-        onCheckForUpdate={checkForUpdate}
+        isOpen={selfUpdate.isModalOpen}
+        status={selfUpdate.status}
+        updateInfo={selfUpdate.updateInfo}
+        logs={selfUpdate.logs}
+        error={selfUpdate.error}
+        remediationCommand={selfUpdate.remediationCommand}
+        reconnectCountdown={selfUpdate.reconnectCountdown}
+        onClose={selfUpdate.closeModal}
+        onApplyUpdate={selfUpdate.applyUpdate}
+        onCheckForUpdate={selfUpdate.checkForUpdate}
       />
     </div>
   );
