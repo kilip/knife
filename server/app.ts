@@ -20,10 +20,11 @@ import { serveStaticFile } from "./features/static/serve";
 import { createTabsRoutes } from "./features/tabs/routes";
 import { loadSettings, saveSettings, type TabData } from "./features/tabs/store";
 import { getShellName, getUserShell } from "./features/terminal/shell";
-import { isAllowedRequestOrigin } from "./features/terminal/ws";
 import { createUpdateRoutes } from "./features/update/routes";
+import { createRateLimiter } from "./middleware/rate-limit";
 import { formatRequestLog, shouldLogRequest } from "./middleware/request-log";
 import { attachSession, requireAuth } from "./middleware/require-auth";
+import { requireOrigin } from "./middleware/require-origin";
 import { getSecurityHeaders } from "./middleware/security-headers";
 import { getClientIp } from "./proxy";
 
@@ -46,6 +47,7 @@ export interface AppDeps {
   getTabs?: () => TabData[];
   setTabs?: (tabs: TabData[]) => void;
   persistTabs?: (tabs: TabData[]) => void;
+  now?: () => number;
 }
 
 function requireJsonContentType(req: Request, headers: HeadersInit): Response | null {
@@ -112,21 +114,14 @@ export function createApp(deps: AppDeps) {
     });
   });
 
-  // Enforce Origin / Sec-Fetch-Site on all non-GET /api/* requests
-  app.use("/api/*", async (c, next) => {
-    if (c.req.method !== "GET" && c.req.method !== "HEAD" && c.req.method !== "OPTIONS") {
-      const cfg = deps.getConfig();
-      if (!isAllowedRequestOrigin(c.req.raw.headers, cfg.publicDomain, cfg.host, cfg.port)) {
-        const url = new URL(c.req.url);
-        const clientIp = c.get("clientIp");
-        console.warn(
-          `[api] Forbidden origin '${c.req.header("origin") ?? null}' (Sec-Fetch-Site: '${c.req.header("sec-fetch-site") ?? null}') for ${c.req.method} ${url.pathname} from ${clientIp}`,
-        );
-        return c.json({ error: "Forbidden origin" }, 403);
-      }
-    }
-    await next();
-  });
+  // Enforce Origin / Sec-Fetch-Site on state-changing /api/* requests
+  app.use("/api/*", requireOrigin(deps.getConfig));
+
+  // Rate limiting on auth and setup endpoints
+  const authRateLimiter = createRateLimiter({ now: deps.now });
+  app.use("/api/setup", authRateLimiter.middleware);
+  app.use("/auth/github", authRateLimiter.middleware);
+  app.use("/auth/github/callback", authRateLimiter.middleware);
 
   // First-run setup API
   app.post("/api/setup", async (c) => {
