@@ -42,7 +42,7 @@ export function closeActivePty(tabId: string): void {
 }
 
 export const websocketHandler = {
-  open(ws: KnifeWebSocket) {
+  async open(ws: KnifeWebSocket) {
     const { tabId, cols, rows } = ws.data;
     const initialCols = cols && cols >= 10 ? cols : 80;
     const initialRows = rows && rows >= 5 ? rows : 24;
@@ -69,10 +69,15 @@ export const websocketHandler = {
       }
 
       if (pty) {
-        // Replay buffered terminal output first so client receives historical context
-        const buf = pty.getBuffer();
-        if (buf) {
-          ws.send(JSON.stringify({ type: "output", data: buf }));
+        ws.data.pty = pty;
+
+        // Replay serialized screen snapshot first so client receives accurate state + scrollback
+        const snapshot = await pty.getSnapshot();
+        if (activeSockets.get(tabId) !== ws || ws.readyState !== 1) {
+          return;
+        }
+        if (snapshot) {
+          ws.send(JSON.stringify({ type: "output", data: snapshot }));
         }
 
         // Re-attach existing PTY session callbacks

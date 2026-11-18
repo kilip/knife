@@ -7,7 +7,7 @@ A single-user self-hosted web terminal with multi-tab support, PWA, and integrat
 ## ✨ Features
 
 - **Native Bun PTY**: Uses Bun's native `Bun.Terminal` PTY engine spawning your login shell (`$SHELL -l`) directly — no native C++ addons or `node-pty` required.
-- **Resilient WebSockets**: Disconnecting or refreshing the page keeps the PTY alive for a 60-second grace period and replays the 128 KB rolling output buffer on reconnect. Auto-reconnect with exponential backoff and application-level ping/pong heartbeats.
+- **Resilient WebSockets**: Disconnecting or refreshing the page keeps the PTY alive for a 60-second grace period and replays a server-side screen snapshot (plus bounded scrollback) on reconnect. Auto-reconnect with exponential backoff and application-level ping/pong heartbeats.
 - **React Router 8 + Tailwind CSS**: Clean single-page application built on React Router 8 (framework mode, `ssr: false`) with CSS-variable-driven theming.
 - **Full xterm.js feature set**: Fit, WebLinks, WebGL with Canvas/DOM fallbacks, Unicode 11, OSC 52 clipboard sync, truecolor (24-bit), and mouse reporting.
 - **5 Built-in Themes**: Catppuccin Mocha (default), Tokyo Night, Nord, Gruvbox Dark, and Dracula. One unified definition powers both Tailwind UI tokens and the 16-color terminal palette, with zero flash on initial load.
@@ -30,13 +30,13 @@ Reverse Proxy (Caddy / Nginx, terminates TLS)
 Knife Bun HTTP & WebSocket Server
        │
        └─► In-memory PTY Registry (tabId -> PtySession via Bun.Terminal)
-                 ├── knife-<id-1> ($SHELL -l, 128 KB rolling buffer)
-                 ├── knife-<id-2> ($SHELL -l, 128 KB rolling buffer)
-                 └── knife-<id-3> ($SHELL -l, 128 KB rolling buffer)
+                 ├── knife-<id-1> ($SHELL -l, headless screen snapshot)
+                 ├── knife-<id-2> ($SHELL -l, headless screen snapshot)
+                 └── knife-<id-3> ($SHELL -l, headless screen snapshot)
 ```
 
 - **Tab Persistence**: Tab metadata (`id`, `name`, `order`, `createdAt`) is persisted in `<dataDir>/tabs.json`.
-- **WebSocket Reconnect**: When a client disconnects or refreshes, Knife keeps the in-memory `PtySession` alive for a 60-second grace period. Reconnecting within that window cancels the timer and replays the 128 KB rolling output buffer.
+- **WebSocket Reconnect**: When a client disconnects or refreshes, Knife keeps the in-memory `PtySession` alive for a 60-second grace period. Reconnecting within that window cancels the timer and replays a serialized server-side screen snapshot (active screen, modes, and up to 1,000 lines of scrollback).
 - **Explicit Close & Restart**: Closing a tab immediately terminates its `PtySession` and removes it from `tabs.json`. Restarting the Knife server or applying a self-update terminates all running shells.
 
 ---

@@ -1,5 +1,6 @@
 import { readlinkSync } from "node:fs";
 import { getUserShell } from "./shell";
+import { ScreenSnapshot } from "./snapshot";
 
 export const MAX_PTY_BUFFER_SIZE = 128 * 1024; // 128 KB rolling buffer
 
@@ -47,8 +48,7 @@ export class PtySession {
   private proc: ReturnType<typeof Bun.spawn> | null = null;
   public readonly tabId: string;
   private isClosed: boolean = false;
-  private outputBuffer: string = "";
-  private readonly maxBufferSize: number = MAX_PTY_BUFFER_SIZE;
+  private readonly snapshot: ScreenSnapshot;
   private readonly decoder = new TextDecoder("utf-8");
   private onData?: (data: string) => void;
   private onExit?: (code: number) => void;
@@ -62,6 +62,7 @@ export class PtySession {
     const initialRows = Math.max(5, options.rows || 24);
     const shell = options.shellPath || getUserShell();
     const cwd = options.cwd || process.env.HOME || "/";
+    this.snapshot = new ScreenSnapshot(initialCols, initialRows);
 
     this.term = new Bun.Terminal({
       cols: initialCols,
@@ -70,7 +71,7 @@ export class PtySession {
         if (!this.isClosed) {
           const str = decodePtyChunk(this.decoder, data);
           if (str.length > 0) {
-            this.outputBuffer = appendRollingBuffer(this.outputBuffer, str, this.maxBufferSize);
+            this.snapshot.write(str);
             this.onData?.(str);
           }
         }
@@ -94,6 +95,7 @@ export class PtySession {
       this.proc.exited.then((code: number) => {
         if (!this.isClosed) {
           this.isClosed = true;
+          this.snapshot.dispose();
           try {
             this.term?.close();
           } catch {}
@@ -102,6 +104,7 @@ export class PtySession {
       });
     } catch (err) {
       this.isClosed = true;
+      this.snapshot.dispose();
       try {
         this.term?.close();
       } catch {}
@@ -126,8 +129,8 @@ export class PtySession {
     this.onExit = undefined;
   }
 
-  public getBuffer(): string {
-    return this.outputBuffer;
+  public async getSnapshot(): Promise<string> {
+    return this.snapshot.getSnapshot();
   }
 
   public getCwd(): string | null {
@@ -154,6 +157,7 @@ export class PtySession {
     const safeRows = Math.max(5, Math.floor(rows));
     try {
       this.term.resize(safeCols, safeRows);
+      this.snapshot.resize(safeCols, safeRows);
       if (this.proc && !this.proc.killed) {
         this.proc.kill("SIGWINCH");
       }
@@ -169,6 +173,7 @@ export class PtySession {
   public close(): void {
     if (this.isClosed) return;
     this.isClosed = true;
+    this.snapshot.dispose();
     try {
       if (this.proc && !this.proc.killed) {
         this.proc.kill();

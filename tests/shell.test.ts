@@ -43,8 +43,8 @@ describe("User Shell Detection and Direct PTY", () => {
     const result = await promise;
     expect(result).toContain("knife_shell_test_ok");
 
-    // Verify buffer was retained
-    expect(pty.getBuffer()).toContain("knife_shell_test_ok");
+    // Verify screen snapshot retained output
+    expect(await pty.getSnapshot()).toContain("knife_shell_test_ok");
 
     // Clean up
     pty.close();
