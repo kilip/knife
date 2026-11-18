@@ -44,16 +44,6 @@ export default function Setup() {
       setPublicDomain((prev) => prev || window.location.host);
       setPublicScheme(window.location.protocol === "https:" ? "https" : "http");
     }
-
-    // Check if setup already complete
-    api
-      .get<{ isFirstRun?: boolean }>("/api/config/public")
-      .then((data) => {
-        if (!data.isFirstRun) {
-          window.location.href = "/login";
-        }
-      })
-      .catch(() => {});
   }, []);
 
   const handleThemeChange = (newThemeId: string) => {
