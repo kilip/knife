@@ -182,6 +182,17 @@ describe("Knife End-to-End System Tests", () => {
     expect(htmlRes.status).toBe(200);
     expect(htmlRes.headers.get("Content-Type")).toContain("text/html");
     assertSecurityHeaders(htmlRes, `127.0.0.1:${testPort}`);
+
+    const htmlCsp = htmlRes.headers.get("Content-Security-Policy") ?? "";
+    const nonceMatch = htmlCsp.match(/script-src 'self' 'nonce-([^']+)'/);
+    expect(nonceMatch).not.toBeNull();
+    const nonce = nonceMatch![1];
+    const htmlBody = await htmlRes.text();
+    const scriptTags = htmlBody.match(/<script\b[^>]*>/gi) ?? [];
+    expect(scriptTags.length).toBeGreaterThan(0);
+    for (const tag of scriptTags) {
+      expect(tag).toContain(`nonce="${nonce}"`);
+    }
   });
 
   it("rejects setup with invalid token without logging expected token", async () => {

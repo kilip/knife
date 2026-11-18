@@ -27,7 +27,7 @@ import { createRateLimiter } from "./middleware/rate-limit";
 import { formatRequestLog, shouldLogRequest } from "./middleware/request-log";
 import { attachSession, requireAuth } from "./middleware/require-auth";
 import { requireOrigin } from "./middleware/require-origin";
-import { getSecurityHeaders } from "./middleware/security-headers";
+import { getSecurityHeaders, injectScriptNonce } from "./middleware/security-headers";
 import { getClientIp } from "./proxy";
 
 export interface AppBindings {
@@ -379,9 +379,11 @@ export function createApp(deps: AppDeps) {
     const secHeaders = getSecurityHeaders(cfg);
     const reqPath = c.req.path;
 
-    const staticFile = serveStaticFile(reqPath, undefined, secHeaders);
-    if (staticFile) {
-      return staticFile;
+    if (reqPath !== "/index.html") {
+      const staticFile = serveStaticFile(reqPath, undefined, secHeaders);
+      if (staticFile) {
+        return staticFile;
+      }
     }
 
     const currentSession = c.get("session");
@@ -404,8 +406,9 @@ export function createApp(deps: AppDeps) {
 
     const indexHtml = serveStaticFile("/index.html", "text/html; charset=utf-8");
     if (indexHtml) {
-      const text = await indexHtml.text();
-      const headers = new Headers(secHeaders);
+      const nonce = Buffer.from(crypto.getRandomValues(new Uint8Array(16))).toString("base64");
+      const text = injectScriptNonce(await indexHtml.text(), nonce);
+      const headers = getSecurityHeaders(cfg, { scriptNonce: nonce });
       headers.set("Content-Type", "text/html; charset=utf-8");
       headers.set("Cache-Control", "no-cache");
       return new Response(text, { headers });
