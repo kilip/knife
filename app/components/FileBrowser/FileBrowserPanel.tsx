@@ -1,15 +1,16 @@
-import type { ApiErrorResponse, FsListResponse, TabCwdResponse } from "@shared/api";
 import { AlertCircle, Folder, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "~/lib/api";
-import { parsePositiveInt, STORAGE_KEYS, usePersistentState } from "~/lib/use-persistent-state";
+import { useState } from "react";
+import { useFileBrowser } from "~/hooks/useFileBrowser";
+import { usePanelResize } from "~/hooks/usePanelResize";
+import { useUploadConflicts } from "~/hooks/useUploadConflicts";
 import { ConflictDialog } from "./ConflictDialog";
+import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { FileBrowserHeader } from "./FileBrowserHeader";
 import { FileContextMenu } from "./FileContextMenu";
 import { shellEscape } from "./FileItemRow";
 import { FileList } from "./FileList";
 import { FilePreviewModal } from "./FilePreviewModal";
-import type { ConflictResolution, FsItem, SortDirection, SortField } from "./types";
+import type { FsItem } from "./types";
 
 interface FileBrowserPanelProps {
   isOpen: boolean;
@@ -35,228 +36,25 @@ export function FileBrowserPanel({
   onDownloadFile,
   onDownloadArchive,
 }: FileBrowserPanelProps) {
-  const [currentPath, setCurrentPath] = useState<string>("");
-  const [parentPath, setParentPath] = useState<string | null>(null);
-  const [items, setItems] = useState<FsItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isSyncingCwd, setIsSyncingCwd] = useState(false);
-
-  // Sorting & Hidden settings
-  const [sortField, setSortField] = useState<SortField>("name");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
-  const [showHidden, setShowHidden] = usePersistentState<boolean>(
-    STORAGE_KEYS.FILE_BROWSER_HIDDEN,
-    false,
+  const fb = useFileBrowser({ isOpen, activeTabId });
+  const { panelWidth, handleMouseDownResize } = usePanelResize();
+  const { conflictQueue, queueUpload, resolveConflict, cancelConflict } = useUploadConflicts(
+    fb.items,
+    fb.currentPath,
+    onUpload,
   );
 
-  // Selection & Renaming state
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
-  const [renamingPath, setRenamingPath] = useState<string | null>(null);
-
-  // Context Menu state
   const [contextMenu, setContextMenu] = useState<{
     isOpen: boolean;
     position: { x: number; y: number };
     item: FsItem | null;
-  }>({
-    isOpen: false,
-    position: { x: 0, y: 0 },
-    item: null,
-  });
-
-  // Modals state
+  }>({ isOpen: false, position: { x: 0, y: 0 }, item: null });
   const [previewItem, setPreviewItem] = useState<FsItem | null>(null);
   const [itemToDelete, setItemToDelete] = useState<FsItem | null>(null);
 
-  // Pending upload conflicts queue
-  const [conflictQueue, setConflictQueue] = useState<{
-    files: File[];
-    targetDir: string;
-    pendingConflicts: File[];
-  } | null>(null);
-
-  // Panel Width (Desktop resizable)
-  const [panelWidth, setPanelWidth] = usePersistentState<number>(
-    STORAGE_KEYS.FILE_BROWSER_WIDTH,
-    300,
-    {
-      parse: (raw) => {
-        const val = parsePositiveInt(raw);
-        return val !== undefined && val >= 220 && val <= 600 ? val : undefined;
-      },
-    },
-  );
-  const isResizingRef = useRef(false);
-
-  // Load Directory
-  const loadDirectory = useCallback(
-    async (path?: string) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const url = `/api/fs/list?path=${encodeURIComponent(path || currentPath || "")}&hidden=${showHidden}`;
-        const data = await api.get<FsListResponse>(url);
-        setCurrentPath(data.path);
-        setParentPath(data.parent);
-        setItems(data.items);
-      } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : "Failed to load directory");
-      } finally {
-        setLoading(false);
-      }
-    },
-    [currentPath, showHidden],
-  );
-
-  // Initial load
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reload only when panel opens or hidden-files toggle changes
-  useEffect(() => {
-    if (isOpen) {
-      loadDirectory();
-    }
-  }, [isOpen, showHidden]);
-
-  // Sync with tab CWD
-  const syncWithTabCwd = useCallback(async () => {
-    if (!activeTabId) return;
-    setIsSyncingCwd(true);
-    try {
-      const data = await api.get<TabCwdResponse>(`/api/tabs/${activeTabId}/cwd`);
-      if (data.cwd) {
-        loadDirectory(data.cwd);
-      }
-    } catch {
-      // Ignored
-    } finally {
-      setIsSyncingCwd(false);
-    }
-  }, [activeTabId, loadDirectory]);
-
-  // Keyboard shortcut Ctrl+H for hidden files toggle
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "h") {
-        e.preventDefault();
-        setShowHidden((prev) => !prev);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [setShowHidden]);
-
-  // Panel resize drag handling
-  const handleMouseDownResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    isResizingRef.current = true;
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!isResizingRef.current) return;
-      const newWidth = Math.max(220, Math.min(600, moveEvent.clientX));
-      setPanelWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      isResizingRef.current = false;
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-      setPanelWidth((w) => w);
-    };
-
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
-  };
-
-  // Actions
-  const handleNavigate = (path: string) => {
-    setSelectedPath(null);
-    setRenamingPath(null);
-    loadDirectory(path);
-  };
-
-  const handleNavigateParent = () => {
-    if (parentPath) {
-      handleNavigate(parentPath);
-    }
-  };
-
-  const handleSortChange = (field: SortField) => {
-    if (sortField === field) {
-      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
-    } else {
-      setSortField(field);
-      setSortDirection("asc");
-    }
-  };
-
-  const handleCreateFile = async () => {
-    const name = window.prompt("Enter new file name:");
-    if (!name || !name.trim()) return;
-    try {
-      await api.post("/api/fs/action", {
-        action: "touch",
-        parent: currentPath,
-        name: name.trim(),
-      });
-      loadDirectory(currentPath);
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Failed to create file");
-    }
-  };
-
-  const handleCreateFolder = async () => {
-    const name = window.prompt("Enter new folder name:");
-    if (!name || !name.trim()) return;
-    try {
-      await api.post("/api/fs/action", {
-        action: "mkdir",
-        parent: currentPath,
-        name: name.trim(),
-      });
-      loadDirectory(currentPath);
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Failed to create folder");
-    }
-  };
-
-  const handleRenameSubmit = async (newName: string) => {
-    if (!renamingPath) return;
-    try {
-      await api.post("/api/fs/action", {
-        action: "rename",
-        path: renamingPath,
-        name: newName,
-      });
-      loadDirectory(currentPath);
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Failed to rename");
-    } finally {
-      setRenamingPath(null);
-    }
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!itemToDelete) return;
-    try {
-      await api.post("/api/fs/action", {
-        action: "delete",
-        paths: [itemToDelete.path],
-      });
-      loadDirectory(currentPath);
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Failed to delete");
-    } finally {
-      setItemToDelete(null);
-    }
-  };
-
   const handleOpenItem = (item: FsItem) => {
     if (item.isDirectory) {
-      handleNavigate(item.path);
+      fb.navigate(item.path);
     } else {
       setPreviewItem(item);
     }
@@ -264,40 +62,23 @@ export function FileBrowserPanel({
 
   const handleContextMenuTrigger = (e: React.MouseEvent, item: FsItem) => {
     e.preventDefault();
-    setSelectedPath(item.path);
-    setContextMenu({
-      isOpen: true,
-      position: { x: e.clientX, y: e.clientY },
-      item,
-    });
+    fb.setSelectedPath(item.path);
+    setContextMenu({ isOpen: true, position: { x: e.clientX, y: e.clientY }, item });
   };
 
-  // Upload dispatch with collision handling
-  const handleQueueUpload = (fileList: File[] | FileList, relativePaths?: string[]) => {
-    const files = Array.from(fileList);
-    if (files.length === 0) return;
-
-    // Detect existing collisions
-    const existingNames = new Set(items.map((i) => i.name));
-    const conflicts = files.filter((f) => existingNames.has(f.name));
-
-    if (conflicts.length > 0) {
-      setConflictQueue({
-        files,
-        targetDir: currentPath,
-        pendingConflicts: conflicts,
-      });
+  const handleDownload = (item: FsItem) => {
+    if (item.isDirectory) {
+      onDownloadArchive([item.path], `${item.name}.zip`);
     } else {
-      onUpload(currentPath, files, relativePaths, true);
+      onDownloadFile(item.path, item.name, item.size);
     }
   };
 
-  const handleConflictResolve = (resolution: ConflictResolution) => {
-    if (!conflictQueue) return;
-    const { files, targetDir } = conflictQueue;
-    const overwrite = resolution.action === "overwrite";
-    onUpload(targetDir, files, undefined, overwrite);
-    setConflictQueue(null);
+  const handleDeleteConfirm = async () => {
+    if (!itemToDelete) return;
+    const item = itemToDelete;
+    await fb.deleteItem(item);
+    setItemToDelete(null);
   };
 
   if (!isOpen) return null;
@@ -317,7 +98,6 @@ export function FileBrowserPanel({
         style={{ width: `${panelWidth}px` }}
         className="fixed inset-y-0 left-0 z-40 md:static flex flex-col h-full bg-[var(--bg-elevated)] border-r border-[var(--border-subtle)] shadow-xl md:shadow-none select-none transition-[width] duration-75"
       >
-        {/* Top Header */}
         <div className="px-3 py-2 flex items-center justify-between border-b border-[var(--border-subtle)] bg-[var(--bg-base)]">
           <div className="flex items-center gap-2">
             <Folder className="w-4 h-4 text-[var(--accent)]" />
@@ -333,35 +113,33 @@ export function FileBrowserPanel({
           </button>
         </div>
 
-        {/* Browser Header / Breadcrumbs / Actions */}
         <FileBrowserHeader
-          currentPath={currentPath}
-          canNavigateParent={Boolean(parentPath)}
-          showHidden={showHidden}
-          isSyncing={isSyncingCwd}
-          onNavigate={handleNavigate}
-          onNavigateParent={handleNavigateParent}
-          onRefresh={() => loadDirectory(currentPath)}
-          onSyncCwd={syncWithTabCwd}
-          onCreateFolder={handleCreateFolder}
-          onCreateFile={handleCreateFile}
-          onUploadFiles={(files) => handleQueueUpload(files)}
+          currentPath={fb.currentPath}
+          canNavigateParent={Boolean(fb.parentPath)}
+          showHidden={fb.showHidden}
+          isSyncing={fb.isSyncingCwd}
+          onNavigate={fb.navigate}
+          onNavigateParent={fb.navigateParent}
+          onRefresh={() => fb.loadDirectory(fb.currentPath)}
+          onSyncCwd={fb.syncWithTabCwd}
+          onCreateFolder={fb.createFolder}
+          onCreateFile={fb.createFile}
+          onUploadFiles={(files) => queueUpload(files)}
           onUploadFolder={(files) => {
             const relPaths = Array.from(files).map((f) => f.webkitRelativePath || f.name);
-            handleQueueUpload(files, relPaths);
+            queueUpload(files, relPaths);
           }}
-          onToggleHidden={() => setShowHidden((prev) => !prev)}
+          onToggleHidden={() => fb.setShowHidden((prev) => !prev)}
         />
 
-        {/* Content list or loading / error states */}
-        {error ? (
+        {fb.error ? (
           <div className="flex-1 flex flex-col items-center justify-center p-4 text-center text-xs text-[var(--fg-muted)] gap-2">
             <AlertCircle className="w-8 h-8 text-[var(--error)]" />
             <span className="font-medium text-[var(--fg-base)]">Error accessing directory</span>
-            <span>{error}</span>
+            <span>{fb.error}</span>
             <button
               type="button"
-              onClick={() => loadDirectory(parentPath || "/")}
+              onClick={() => fb.loadDirectory(fb.parentPath || "/")}
               className="mt-2 px-3 py-1 rounded bg-[var(--accent)] text-white text-xs font-medium"
             >
               Go to Parent
@@ -369,28 +147,29 @@ export function FileBrowserPanel({
           </div>
         ) : (
           <FileList
-            items={items}
-            parent={parentPath}
-            selectedPath={selectedPath}
-            renamingPath={renamingPath}
-            sortField={sortField}
-            sortDirection={sortDirection}
-            onSortChange={handleSortChange}
-            onSelect={(item) => setSelectedPath(item.path)}
+            items={fb.items}
+            parent={fb.parentPath}
+            selectedPath={fb.selectedPath}
+            renamingPath={fb.renamingPath}
+            sortField={fb.sortField}
+            sortDirection={fb.sortDirection}
+            onSortChange={fb.changeSort}
+            onSelect={(item) => fb.setSelectedPath(item.path)}
             onOpen={handleOpenItem}
-            onNavigateParent={handleNavigateParent}
+            onNavigateParent={fb.navigateParent}
             onContextMenu={handleContextMenuTrigger}
-            onSubmitRename={handleRenameSubmit}
-            onCancelRename={() => setRenamingPath(null)}
+            onSubmitRename={fb.submitRename}
+            onCancelRename={() => fb.setRenamingPath(null)}
           />
         )}
 
-        {/* Footer info bar */}
         <div className="px-3 py-1.5 border-t border-[var(--border-subtle)] text-[11px] text-[var(--fg-muted)] bg-[var(--bg-base)] flex justify-between">
           <span>
-            {loading ? "Loading..." : `${items.length} item${items.length === 1 ? "" : "s"}`}
+            {fb.loading
+              ? "Loading..."
+              : `${fb.items.length} item${fb.items.length === 1 ? "" : "s"}`}
           </span>
-          <span>{showHidden ? "Hidden shown" : "Hidden hidden"}</span>
+          <span>{fb.showHidden ? "Hidden shown" : "Hidden hidden"}</span>
         </div>
 
         {/* Desktop Split-Pane Resize Handle */}
@@ -401,82 +180,35 @@ export function FileBrowserPanel({
         />
       </aside>
 
-      {/* Context Menu */}
       <FileContextMenu
         isOpen={contextMenu.isOpen}
         position={contextMenu.position}
         item={contextMenu.item}
         onClose={() => setContextMenu((prev) => ({ ...prev, isOpen: false }))}
-        onDownload={(item) => {
-          if (item.isDirectory) {
-            onDownloadArchive([item.path], `${item.name}.zip`);
-          } else {
-            onDownloadFile(item.path, item.name, item.size);
-          }
-        }}
-        onInsertPath={(item) => {
-          onInsertTerminalPath(shellEscape(item.path));
-        }}
-        onCopyPath={(item) => {
-          navigator.clipboard.writeText(item.path);
-        }}
-        onRename={(item) => {
-          setRenamingPath(item.path);
-        }}
-        onDelete={(item) => {
-          setItemToDelete(item);
-        }}
+        onDownload={handleDownload}
+        onInsertPath={(item) => onInsertTerminalPath(shellEscape(item.path))}
+        onCopyPath={(item) => navigator.clipboard.writeText(item.path)}
+        onRename={(item) => fb.setRenamingPath(item.path)}
+        onDelete={setItemToDelete}
       />
 
-      {/* Quick Preview Modal */}
       <FilePreviewModal
         isOpen={Boolean(previewItem)}
         item={previewItem}
         onClose={() => setPreviewItem(null)}
         onDownload={(item) => onDownloadFile(item.path, item.name, item.size)}
       />
-      {/* Delete Confirmation Modal */}
-      {itemToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-lg shadow-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-[var(--fg-base)] overflow-hidden p-4 space-y-4">
-            <h3 className="font-semibold text-base text-[var(--error)] flex items-center gap-2">
-              <AlertCircle className="w-5 h-5" />
-              Delete {itemToDelete.isDirectory ? "Folder" : "File"}
-            </h3>
-            <p className="text-sm">
-              Are you sure you want to permanently delete{" "}
-              <span className="font-mono font-medium text-[var(--accent)]">
-                {itemToDelete.name}
-              </span>
-              ?{itemToDelete.isDirectory && " All contents inside will be deleted."}
-            </p>
-            <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border-subtle)]">
-              <button
-                type="button"
-                onClick={() => setItemToDelete(null)}
-                className="px-3 py-1.5 rounded text-xs font-medium text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteConfirm}
-                className="px-3 py-1.5 rounded text-xs font-medium bg-[var(--error)] text-white hover:brightness-110"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Conflict Dialog */}
+      <DeleteConfirmModal
+        item={itemToDelete}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setItemToDelete(null)}
+      />
       <ConflictDialog
         isOpen={Boolean(conflictQueue)}
         fileName={conflictQueue?.pendingConflicts[0]?.name || ""}
         remainingCount={conflictQueue?.pendingConflicts.length || 0}
-        onResolve={handleConflictResolve}
-        onCancel={() => setConflictQueue(null)}
+        onResolve={resolveConflict}
+        onCancel={cancelConflict}
       />
     </>
   );

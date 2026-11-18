@@ -10,6 +10,7 @@ import {
   Upload,
 } from "lucide-react";
 import { useRef } from "react";
+import { getBreadcrumbs } from "./helpers";
 
 interface FileBrowserHeaderProps {
   currentPath: string;
@@ -45,15 +46,7 @@ export function FileBrowserHeader({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
-  // Parse path segments for breadcrumbs
-  const pathParts = currentPath.split("/").filter(Boolean);
-  const breadcrumbs = [
-    { name: "/", path: "/" },
-    ...pathParts.map((part, index) => ({
-      name: part,
-      path: "/" + pathParts.slice(0, index + 1).join("/"),
-    })),
-  ];
+  const breadcrumbs = getBreadcrumbs(currentPath);
 
   return (
     <div className="flex flex-col border-b border-[var(--border-subtle)] bg-[var(--bg-base)]">

@@ -1,5 +1,6 @@
 import { ArrowDown, ArrowUp, Folder } from "lucide-react";
 import { FileItemRow } from "./FileItemRow";
+import { sortItems } from "./helpers";
 import type { FsItem, SortDirection, SortField } from "./types";
 
 interface FileListProps {
@@ -33,22 +34,7 @@ export function FileList({
   onSubmitRename,
   onCancelRename,
 }: FileListProps) {
-  // Sort items client-side
-  const sortedItems = [...items].sort((a, b) => {
-    // Folders always first
-    if (a.isDirectory && !b.isDirectory) return -1;
-    if (!a.isDirectory && b.isDirectory) return 1;
-
-    let res = 0;
-    if (sortField === "name") {
-      res = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
-    } else if (sortField === "size") {
-      res = a.size - b.size;
-    } else if (sortField === "mtime") {
-      res = a.mtime - b.mtime;
-    }
-    return sortDirection === "asc" ? res : -res;
-  });
+  const sortedItems = sortItems(items, sortField, sortDirection);
 
   const renderSortIndicator = (field: SortField) => {
     if (sortField !== field) return null;
