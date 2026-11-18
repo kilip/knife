@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { UpdateInfo, UpdateStatus } from "~/hooks/useSelfUpdate";
+import type { UpdateInfo, UpdateStatus } from "~/features/update/useSelfUpdate";
 
 interface SelfUpdateModalProps {
   isOpen: boolean;

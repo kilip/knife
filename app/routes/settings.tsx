@@ -17,11 +17,11 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { SelfUpdateModal } from "~/components/SelfUpdateModal";
-import { useSelfUpdate } from "~/hooks/useSelfUpdate";
-import { FONT_PRESETS, useSettings } from "~/hooks/useSettings";
+import { FONT_PRESETS, useSettings } from "~/features/settings/useSettings";
+import { THEMES } from "~/features/theme/themes";
+import { SelfUpdateModal } from "~/features/update/SelfUpdateModal";
+import { useSelfUpdate } from "~/features/update/useSelfUpdate";
 import { api } from "~/lib/api";
-import { THEMES } from "~/utils/themes";
 
 type SettingsTab = "appearance" | "terminal" | "behavior" | "system";
 

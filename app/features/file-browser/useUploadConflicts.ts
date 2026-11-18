@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ConflictResolution, FsItem } from "~/components/FileBrowser/types";
+import type { ConflictResolution, FsItem } from "~/features/file-browser/types";
 
 type OnUpload = (
   targetDir: string,

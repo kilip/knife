@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { getTopLevelDir } from "../app/utils/cwd";
+import { getTopLevelDir } from "../app/features/tabs/cwd";
 
 describe("CWD Top-Level Directory Resolution", () => {
   it("resolves top level directory name from POSIX paths", () => {

@@ -15,11 +15,11 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import type { KnifeTheme } from "~/utils/themes";
-import { PwaInstallButton } from "./PwaInstallButton";
-import { StatusIndicator } from "./StatusIndicator";
-import type { ConnectionStatus } from "./TerminalTab";
-import { ThemeSelector } from "./ThemeSelector";
+import { StatusIndicator } from "~/components/ui/StatusIndicator";
+import { PwaInstallButton } from "~/features/pwa/PwaInstallButton";
+import type { ConnectionStatus } from "~/features/terminal/TerminalTab";
+import { ThemeSelector } from "~/features/theme/ThemeSelector";
+import type { KnifeTheme } from "~/features/theme/themes";
 
 interface TabBarProps {
   tabs: TabData[];

@@ -1,8 +1,8 @@
 import { AlertCircle, Folder, X } from "lucide-react";
 import { useState } from "react";
-import { useFileBrowser } from "~/hooks/useFileBrowser";
-import { usePanelResize } from "~/hooks/usePanelResize";
-import { useUploadConflicts } from "~/hooks/useUploadConflicts";
+import { useFileBrowser } from "~/features/file-browser/useFileBrowser";
+import { usePanelResize } from "~/features/file-browser/usePanelResize";
+import { useUploadConflicts } from "~/features/file-browser/useUploadConflicts";
 import { ConflictDialog } from "./ConflictDialog";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { FileBrowserHeader } from "./FileBrowserHeader";

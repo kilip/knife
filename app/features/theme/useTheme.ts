@@ -1,8 +1,8 @@
 import type { MeResponse } from "@shared/api";
 import { useCallback, useEffect, useState } from "react";
-import type { UserSettings } from "~/hooks/useSettings";
+import type { UserSettings } from "~/features/settings/useSettings";
+import { getTheme } from "~/features/theme/themes";
 import { ApiError, api } from "~/lib/api";
-import { getTheme } from "~/utils/themes";
 
 interface UseThemeOptions {
   themeId: string;

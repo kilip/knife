@@ -133,7 +133,7 @@ describe("Origin Check & Auth Rate Limiting", () => {
   });
 
   it("keys rate limiting per IP and honors X-Forwarded-For ONLY for trustedProxies", async () => {
-    let now = 2_000_000;
+    const now = 2_000_000;
     const config = createTestConfig({ trustedProxies: ["10.0.0.1"] });
     const app = createApp({
       getConfig: () => config,

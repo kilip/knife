@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
+import { applyTheme, getStoredThemeId } from "~/features/theme/themes";
 import { api } from "~/lib/api";
-import { applyTheme, getStoredThemeId } from "~/utils/themes";
 
 export default function Login() {
   const [allowedUser, setAllowedUser] = useState<string | null>(null);

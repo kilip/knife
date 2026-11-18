@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { applyTheme } from "~/features/theme/themes";
 import { api } from "~/lib/api";
 import { parseFontSize, readStorage, STORAGE_KEYS, writeStorage } from "~/lib/use-persistent-state";
-import { applyTheme } from "~/utils/themes";
 
 export interface UserSettings {
   // Appearance

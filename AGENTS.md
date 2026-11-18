@@ -26,11 +26,12 @@ CI runs `bun install --frozen-lockfile` -> `check` -> `typecheck` -> `build` -> 
 
 - **Single process** serves the SPA, `/api/*`, `/auth/*` and the `/ws/terminal` WebSocket. `Bun.serve` in `server/index.ts` handles `/ws/terminal` upgrades directly and delegates HTTP requests to the Hono app in `server/app.ts`.
 - **Server layout:** `server/app.ts` (Hono HTTP app), `server/cli.ts` (help & startup banners), `server/middleware/` (`require-auth.ts`, `require-origin.ts`, `rate-limit.ts`, `security-headers.ts`, `request-log.ts`), `server/features/static/serve.ts` (SPA/asset serving), `server/features/terminal/` (`ws.ts`, `pty.ts`, `shell.ts`), `server/features/tabs/` (`routes.ts`, `store.ts`), `server/features/fs/` (`routes.ts`, `paths.ts`, `list.ts`, `zip.ts`), `server/features/update/` (`routes.ts`, `update.ts`), `server/service/` (daemon management).
+- **Client layout:** `app/features/` (`terminal/`, `tabs/`, `file-browser/`, `pwa/`, `update/`, `theme/`, `settings/`), `app/components/ui/` (`ConfirmModal.tsx`, `StatusIndicator.tsx`), `app/lib/` (`api.ts`, `use-persistent-state.ts`), `app/routes/`.
 - **Sessions:** each tab is a `TabData` persisted in `<dataDir>/tabs.json`; `server/features/terminal/ws.ts` keeps live `PtySession`s keyed by `tabId`. On disconnect a 60s grace timer runs before the PTY is killed; reconnecting replays the rolling buffer.
 - **Direct PTY:** sessions spawn `$SHELL -l` directly via `Bun.Terminal` (`server/features/terminal/pty.ts`). If you change session behavior, update `README.md`.
 - **Auth:** single user. First run uses a one-time console setup token; afterwards GitHub OAuth limited to `allowedUsername`. Sessions are HMAC-signed cookies. Use `timingSafeEqual` for secret comparison.
 - **Config & data:** `config.json` and `data/` are gitignored; never commit them.
-- **Themes:** colors live only in `app/utils/themes.ts`, not in component CSS.
+- **Themes:** colors live only in `app/features/theme/themes.ts`, not in component CSS.
 - **PWA:** the service worker must never intercept `/api/`, `/ws/` or `/auth/`. `skipWaiting: false` is deliberate so updates never drop live terminals.
 - **Platform-specific code** goes in `server/service/managers/*`, not shared modules.
 

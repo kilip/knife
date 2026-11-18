@@ -1,10 +1,10 @@
 import type { FsListResponse, TabCwdResponse } from "@shared/api";
 import { useCallback, useEffect, useState } from "react";
-import type { FsItem, SortDirection, SortField } from "~/components/FileBrowser/types";
+import type { FsItem, SortDirection, SortField } from "~/features/file-browser/types";
 import { api } from "~/lib/api";
 import { STORAGE_KEYS, usePersistentState } from "~/lib/use-persistent-state";
 
-export { getBreadcrumbs, sortItems } from "~/components/FileBrowser/helpers";
+export { getBreadcrumbs, sortItems } from "~/features/file-browser/helpers";
 
 const errorMessage = (err: unknown, fallback: string) =>
   err instanceof Error ? err.message : fallback;

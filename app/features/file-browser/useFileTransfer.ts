@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import type { FileTransferItem } from "~/components/FileBrowser/types";
+import type { FileTransferItem } from "~/features/file-browser/types";
 import { apiRaw } from "~/lib/api";
 
 export function useFileTransfer() {

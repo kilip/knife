@@ -6,7 +6,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
 import { type RefObject, useEffect, useRef } from "react";
 import "@xterm/xterm/css/xterm.css";
-import type { KnifeTheme } from "~/utils/themes";
+import type { KnifeTheme } from "~/features/theme/themes";
 
 export interface XtermOptions {
   theme: KnifeTheme;

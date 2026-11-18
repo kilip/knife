@@ -1,7 +1,7 @@
 import { ArrowRight, Check, Copy, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
+import { applyTheme, THEMES } from "~/features/theme/themes";
 import { api } from "~/lib/api";
-import { applyTheme, THEMES } from "~/utils/themes";
 
 /**
  * Extracts a one-time setup token from a URL fragment (e.g. `#token=...`).

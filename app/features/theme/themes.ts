@@ -1,5 +1,5 @@
 import type { ITheme } from "@xterm/xterm";
-import { readStorage, STORAGE_KEYS, writeStorage } from "~/lib/use-persistent-state";
+import { readStorage, STORAGE_KEYS, writeStorage } from "../../lib/storage";
 
 export interface ThemeColors {
   bgBase: string;

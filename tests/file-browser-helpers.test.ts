@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { getBreadcrumbs, sortItems } from "../app/components/FileBrowser/helpers";
-import type { FsItem } from "../app/components/FileBrowser/types";
+import { getBreadcrumbs, sortItems } from "../app/features/file-browser/helpers";
+import type { FsItem } from "../app/features/file-browser/types";
 
 const item = (name: string, isDirectory: boolean, size = 0, mtime = 0): FsItem =>
   ({ name, path: `/x/${name}`, isDirectory, size, mtime }) as FsItem;

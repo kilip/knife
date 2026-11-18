@@ -1,7 +1,7 @@
 import type { TabCwdResponse } from "@shared/api";
 import { useCallback, useEffect } from "react";
+import { getTopLevelDir } from "~/features/tabs/cwd";
 import { api } from "~/lib/api";
-import { getTopLevelDir } from "~/utils/cwd";
 
 interface UseTabCwdOptions {
   activeTabId: string;

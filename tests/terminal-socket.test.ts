@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { getReconnectDelay } from "../app/hooks/useTerminalSocket";
+import { getReconnectDelay } from "../app/features/terminal/useTerminalSocket";
 
 describe("getReconnectDelay", () => {
   it("starts at 1000ms for the first attempt", () => {

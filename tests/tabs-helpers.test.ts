@@ -4,7 +4,7 @@ import {
   getAdjacentTabId,
   getNextActiveTabIdAfterClose,
   moveTabInList,
-} from "../app/hooks/useTabs";
+} from "../app/features/tabs/useTabs";
 
 const sampleTabs: TabData[] = [
   { id: "a", name: "Tab A", order: 0, createdAt: 100 },

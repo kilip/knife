@@ -1,7 +1,7 @@
 import { Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { type ConnectionStatus, useTerminalSocket } from "~/hooks/useTerminalSocket";
-import { useXterm, type XtermOptions } from "~/hooks/useXterm";
+import { type ConnectionStatus, useTerminalSocket } from "~/features/terminal/useTerminalSocket";
+import { useXterm, type XtermOptions } from "~/features/terminal/useXterm";
 
 export type { ConnectionStatus };
 

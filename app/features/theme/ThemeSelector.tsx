@@ -1,6 +1,6 @@
 import { Check, Palette } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { type KnifeTheme, THEMES } from "~/utils/themes";
+import { type KnifeTheme, THEMES } from "~/features/theme/themes";
 
 interface ThemeSelectorProps {
   currentTheme: KnifeTheme;

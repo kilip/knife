@@ -1,7 +1,7 @@
 import type { MeResponse } from "@shared/api";
 import type { TabData } from "@shared/tabs";
 import { Hono } from "hono";
-import { THEME_MAP } from "../app/utils/themes";
+import { THEME_MAP } from "../app/features/theme/themes";
 import {
   authorizeGitHubUser,
   consumeSetupToken,

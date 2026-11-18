@@ -1,4 +1,4 @@
-import type { ConnectionStatus } from "./TerminalTab";
+import type { ConnectionStatus } from "~/features/terminal/TerminalTab";
 
 interface StatusIndicatorProps {
   status?: ConnectionStatus;

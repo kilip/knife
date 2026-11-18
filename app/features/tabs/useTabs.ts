@@ -1,9 +1,9 @@
 import type { TabCwdResponse } from "@shared/api";
 import type { TabData } from "@shared/tabs";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ConnectionStatus, TerminalActions } from "~/components/TerminalTab";
+import { getTopLevelDir } from "~/features/tabs/cwd";
+import type { ConnectionStatus, TerminalActions } from "~/features/terminal/TerminalTab";
 import { ApiError, api } from "~/lib/api";
-import { getTopLevelDir } from "~/utils/cwd";
 
 export function moveTabInList(
   tabs: TabData[],

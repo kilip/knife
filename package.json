@@ -17,7 +17,8 @@
   },
   "homepage": "https://github.com/kilip/knife#readme",
   "files": [
-    "app/utils/themes.ts",
+    "app/features/theme/themes.ts",
+    "app/lib/storage.ts",
     "bin",
     "build",
     "server",
