@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.6.0-rc1](https://github.com/kilip/knife/compare/v0.5.0...v0.6.0-rc1) (2026-11-18)
+
+
+### Features
+
+* ✨ add origin middleware and auth rate limiting ([16f3ea2](https://github.com/kilip/knife/commit/16f3ea2ea93129ddf20aff48f6109eba7e70fc7f))
+* ✨ use headless xterm snapshot for reconnect replay ([07326da](https://github.com/kilip/knife/commit/07326da8e98ee32b374ca587ba82bc20dba58652))
+
+
+### Bug Fixes
+
+* 🐛 derive sw index.html precache revision from build ([d4355ef](https://github.com/kilip/knife/commit/d4355ef8878552ef0c5fee9d3fd1e5cf05a4c088))
+* 🐛 write tabs.json atomically and preserve corrupt files ([f4e4ebe](https://github.com/kilip/knife/commit/f4e4ebe746c5d089c65c4a16ce6ff9ccbe9387d0))
+
+
+### Refactoring
+
+* ♻️ add shared wire types for tabs and api ([98db656](https://github.com/kilip/knife/commit/98db656224d79557b9b6942296df3ca59bc42494))
+* ♻️ add typed api client and persistent state hook ([79b8067](https://github.com/kilip/knife/commit/79b80676318323e3c2d2d75a575993c45b576a7a))
+* ♻️ centralize api auth middleware and route tests ([afe1e2c](https://github.com/kilip/knife/commit/afe1e2c5bd6815f35e99419f174192788ca9e973))
+* ♻️ extract server cli, middleware, static, terminal ([6529e1e](https://github.com/kilip/knife/commit/6529e1eed6f1158dec152c2c31f8376d8539c7bb))
+* ♻️ extract tab, theme, cwd, shortcut hooks from home ([c49802d](https://github.com/kilip/knife/commit/c49802d154efef75517a6ab9f1cf799c8b81ae01))
+* ♻️ introduce hono app and migrate core routes ([162aeb1](https://github.com/kilip/knife/commit/162aeb1f6d5703499a34545b0f385f483f306787))
+* ♻️ migrate feature routes and drop legacy handler ([c3e23eb](https://github.com/kilip/knife/commit/c3e23ebb2468a4424ea9a4de0bae69e2a551c994))
+* ♻️ remove tmux remnants ([8f38c77](https://github.com/kilip/knife/commit/8f38c7724a1b3f3510293674708407939bb984c6))
+* ♻️ reorganize app into feature folders ([4b11024](https://github.com/kilip/knife/commit/4b110245d71f0cb68f20916a090680eb91c01d57))
+* ♻️ split FileBrowserPanel into useFileBrowser ([62d8e3e](https://github.com/kilip/knife/commit/62d8e3efa873d4bc1feb19297522160415bc98ac))
+* ♻️ split TerminalTab into socket and xterm hooks ([2262336](https://github.com/kilip/knife/commit/226233660e1c9c68f5f4247c36eaab8c449b5eb0))
+
+
+### Documentation
+
+* 📝 update README.md ([f5767f7](https://github.com/kilip/knife/commit/f5767f755f8592cd3c635af2cb9e8e3763f0cd10))
+
+
+### Miscellaneous Chores
+
+* 🔧 release 0.6.0-rc1 ([49b5ea8](https://github.com/kilip/knife/commit/49b5ea838b6adf2f219df6eefd409f8a8b38c05a))
+
 ## [0.5.0](https://github.com/kilip/knife/compare/v0.4.1...v0.5.0) (2026-11-17)
 
 
