@@ -7,3 +7,5 @@ config.json
 .env
 .env.*
 .DS_Store
+e2e/reports/
+e2e/artifacts/

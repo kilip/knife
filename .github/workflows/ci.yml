@@ -37,3 +37,27 @@ jobs:
 
       - name: Run test suite
         run: bun test
+
+  e2e:
+    name: Browser E2E (Playwright + Cucumber)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: bunx playwright install --with-deps chromium
+
+      - name: Build client production assets
+        run: bun run build
+
+      - name: Run Playwright Cucumber E2E suite
+        run: bun run e2e
