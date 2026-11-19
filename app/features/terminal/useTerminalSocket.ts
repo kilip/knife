@@ -8,7 +8,7 @@ const RECONNECT_BASE_MS = 1000;
 const RECONNECT_FACTOR = 1.5;
 const RECONNECT_MAX_MS = 15000;
 const HEARTBEAT_INTERVAL_MS = 15000;
-const HEARTBEAT_TIMEOUT_MS = 45000;
+const PONG_TIMEOUT_MS = 10000;
 
 /** Exponential backoff delay for the given zero-based reconnect attempt. */
 export function getReconnectDelay(attempt: number): number {
@@ -58,11 +58,36 @@ export function useTerminalSocket({
     let shouldReconnect = true;
     let reconnectTimer: number | NodeJS.Timeout | undefined;
     let heartbeatTimer: number | NodeJS.Timeout | undefined;
+    let pongTimeoutTimer: number | NodeJS.Timeout | undefined;
 
     const updateStatus = (status: ConnectionStatus) => onStatusChangeRef.current?.(status);
 
+    const clearPongTimeout = () => {
+      if (pongTimeoutTimer !== undefined) {
+        clearTimeout(pongTimeoutTimer);
+        pongTimeoutTimer = undefined;
+      }
+    };
+
+    const sendPing = (ws: WebSocket) => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      ws.send(JSON.stringify({ type: "ping" }));
+      if (pongTimeoutTimer === undefined) {
+        pongTimeoutTimer = setTimeout(() => {
+          pongTimeoutTimer = undefined;
+          if (!isDisposed && wsRef.current === ws && ws.readyState === WebSocket.OPEN) {
+            console.warn("[ws] Heartbeat timeout, reconnecting...");
+            ws.close();
+          }
+        }, PONG_TIMEOUT_MS);
+      }
+    };
+
     function connect() {
       if (isDisposed) return;
+      clearTimeout(reconnectTimer);
+      clearInterval(heartbeatTimer);
+      clearPongTimeout();
       updateStatus(reconnectAttempts > 0 ? "reconnecting" : "connecting");
 
       try {
@@ -76,10 +101,8 @@ export function useTerminalSocket({
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
-      let lastMessageTime = Date.now();
-
       ws.onopen = () => {
-        if (isDisposed) {
+        if (isDisposed || wsRef.current !== ws) {
           ws.close();
           return;
         }
@@ -99,19 +122,12 @@ export function useTerminalSocket({
         } catch {}
 
         clearInterval(heartbeatTimer);
-        heartbeatTimer = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "ping" }));
-            if (Date.now() - lastMessageTime > HEARTBEAT_TIMEOUT_MS) {
-              console.warn("[ws] Heartbeat timeout, reconnecting...");
-              ws.close();
-            }
-          }
-        }, HEARTBEAT_INTERVAL_MS);
+        heartbeatTimer = setInterval(() => sendPing(ws), HEARTBEAT_INTERVAL_MS);
       };
 
       ws.onmessage = (event) => {
-        lastMessageTime = Date.now();
+        if (isDisposed || wsRef.current !== ws) return;
+        clearPongTimeout();
         const term = termRef.current;
         try {
           const msg = JSON.parse(event.data);
@@ -133,12 +149,16 @@ export function useTerminalSocket({
       };
 
       ws.onclose = (event) => {
+        if (wsRef.current !== ws) return;
         clearInterval(heartbeatTimer);
+        clearPongTimeout();
         if (isDisposed) return;
 
         if (event.code !== 1000 && shouldReconnect) {
+          updateStatus("reconnecting");
           const delay = getReconnectDelay(reconnectAttempts);
           reconnectAttempts++;
+          clearTimeout(reconnectTimer);
           reconnectTimer = setTimeout(connect, delay);
         } else {
           updateStatus("disconnected");
@@ -146,18 +166,42 @@ export function useTerminalSocket({
       };
 
       ws.onerror = () => {
+        if (wsRef.current !== ws) return;
         try {
           ws.close();
         } catch {}
       };
     }
 
+    const ensureConnected = () => {
+      if (isDisposed || !shouldReconnect) return;
+      const ws = wsRef.current;
+      if (!ws || (ws.readyState !== WebSocket.OPEN && ws.readyState !== WebSocket.CONNECTING)) {
+        reconnectAttempts = 0;
+        connect();
+      } else if (ws.readyState === WebSocket.OPEN) {
+        sendPing(ws);
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        ensureConnected();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("online", ensureConnected);
+
     connect();
 
     return () => {
       isDisposed = true;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("online", ensureConnected);
       clearTimeout(reconnectTimer);
       clearInterval(heartbeatTimer);
+      clearPongTimeout();
       try {
         wsRef.current?.close(1000, "Tab unmounted");
       } catch {}

@@ -209,7 +209,28 @@ export function useXterm({
         }
       } catch {}
     }, 50);
-    return () => clearTimeout(timer);
+
+    const restoreFocus = () => {
+      const activeEl = document.activeElement;
+      const isFormInput =
+        (activeEl?.tagName === "INPUT" || activeEl?.tagName === "TEXTAREA") &&
+        !activeEl.classList.contains("xterm-helper-textarea");
+      if (!isFormInput) {
+        termRef.current?.focus();
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") restoreFocus();
+    };
+
+    window.addEventListener("focus", restoreFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("focus", restoreFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [isActive]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: initialize terminal once per tabId
