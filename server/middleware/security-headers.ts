@@ -32,8 +32,11 @@ export function getSecurityHeaders(cfg: KnifeConfig, options?: SecurityHeadersOp
 }
 
 /**
- * Adds a CSP `nonce` attribute to every `<script>` tag that does not already have one.
+ * Adds a CSP `nonce` attribute and `data-cfasync="false"` (so Cloudflare
+ * Rocket Loader does not rewrite scripts and break CSP nonces) to every `<script>` tag.
  */
 export function injectScriptNonce(html: string, nonce: string): string {
-  return html.replace(/<script\b(?![^>]*\bnonce=)/gi, `<script nonce="${nonce}"`);
+  return html
+    .replace(/<script\b(?![^>]*\bnonce=)/gi, `<script nonce="${nonce}"`)
+    .replace(/<script\b(?![^>]*\bdata-cfasync=)/gi, '<script data-cfasync="false"');
 }

@@ -30,12 +30,12 @@ describe("Security Headers Middleware", () => {
     expect(csp).toContain("script-src 'self' 'nonce-abc123=='");
   });
 
-  it("injects nonce attribute onto all script tags without duplicating existing ones", () => {
+  it("injects nonce and data-cfasync=false onto all script tags without duplicating existing ones", () => {
     const html =
-      '<html><head><script>a()</script><script type="module" async="">b()</script><script nonce="keep">c()</script></head></html>';
+      '<html><head><script>a()</script><script type="module" async="">b()</script><script nonce="keep" data-cfasync="true">c()</script></head></html>';
     const result = injectScriptNonce(html, "xyz789==");
     expect(result).toBe(
-      '<html><head><script nonce="xyz789==">a()</script><script nonce="xyz789==" type="module" async="">b()</script><script nonce="keep">c()</script></head></html>',
+      '<html><head><script data-cfasync="false" nonce="xyz789==">a()</script><script data-cfasync="false" nonce="xyz789==" type="module" async="">b()</script><script nonce="keep" data-cfasync="true">c()</script></head></html>',
     );
   });
 });
