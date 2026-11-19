@@ -132,6 +132,9 @@ export function useTerminalSocket({
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === "output") {
+            if (msg.reset) {
+              term?.reset();
+            }
             term?.write(msg.data);
           } else if (msg.type === "pong") {
             // Heartbeat ACK

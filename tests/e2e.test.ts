@@ -358,6 +358,7 @@ describe("Knife End-to-End System Tests", () => {
       headers: { Cookie: cookieHeader },
     } as unknown as string[]);
     let output2 = "";
+    let sawResetReplay = false;
     const { promise: p2, resolve: r2, reject: rej2 } = Promise.withResolvers<void>();
 
     ws2.onopen = () => {
@@ -366,7 +367,14 @@ describe("Knife End-to-End System Tests", () => {
     };
 
     ws2.onmessage = (e) => {
-      output2 += String(e.data);
+      const raw = String(e.data);
+      output2 += raw;
+      try {
+        const parsed = JSON.parse(raw) as { type?: string; reset?: boolean };
+        if (parsed.type === "output" && parsed.reset === true) {
+          sawResetReplay = true;
+        }
+      } catch {}
       if (output2.includes("reconnected_ok")) {
         r2();
       }
@@ -375,6 +383,7 @@ describe("Knife End-to-End System Tests", () => {
     ws2.onerror = (err) => rej2(err);
 
     await p2;
+    expect(sawResetReplay).toBe(true);
     expect(output2).toContain("reconnected_ok");
 
     const { promise: closePromise2, resolve: closeResolve2 } = Promise.withResolvers<void>();

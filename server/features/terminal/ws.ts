@@ -77,7 +77,7 @@ export const websocketHandler = {
           return;
         }
         if (snapshot) {
-          ws.send(JSON.stringify({ type: "output", data: snapshot }));
+          ws.send(JSON.stringify({ type: "output", data: snapshot, reset: true }));
         }
 
         // Re-attach existing PTY session callbacks
