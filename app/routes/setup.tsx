@@ -1,5 +1,6 @@
 import { ArrowRight, Check, Copy, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
+import { KnifeLogo } from "~/components/ui/KnifeLogo";
 import { applyTheme, THEMES } from "~/features/theme/themes";
 import { api } from "~/lib/api";
 
@@ -97,12 +98,10 @@ export default function Setup() {
         {/* Header */}
         <div className="flex items-center gap-3 pb-6 border-b border-[var(--border)]">
           <div className="w-12 h-12 rounded-xl bg-[var(--accent)]/15 text-[var(--accent)] flex items-center justify-center shadow-inner">
-            <span className="text-2xl select-none leading-none" role="img" aria-label="knife">
-              🔪
-            </span>
+            <KnifeLogo className="w-7 h-7" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight font-mono">Knife Setup 🔪</h1>
+            <h1 className="text-xl font-bold tracking-tight font-mono">Knife Setup</h1>
             <p className="text-xs text-[var(--fg-muted)] mt-0.5">
               Configure your single-user persistent web terminal
             </p>

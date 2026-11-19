@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { KnifeLogo } from "~/components/ui/KnifeLogo";
 import { applyTheme, getStoredThemeId } from "~/features/theme/themes";
 import { api } from "~/lib/api";
 
@@ -29,12 +30,10 @@ export default function Login() {
       <div className="w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-8 shadow-2xl text-center">
         {/* Logo */}
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-[var(--accent)]/15 text-[var(--accent)] mb-4 shadow-inner">
-          <span className="text-3xl select-none leading-none" role="img" aria-label="knife">
-            🔪
-          </span>
+          <KnifeLogo className="w-9 h-9" />
         </div>
 
-        <h1 className="text-2xl font-bold tracking-tight font-mono">knife 🔪</h1>
+        <h1 className="text-2xl font-bold tracking-tight font-mono">knife</h1>
         <p className="text-xs text-[var(--fg-muted)] mt-1.5">Single-user persistent web terminal</p>
 
         {allowedUser && (

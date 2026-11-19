@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
+import { KnifeLogo } from "~/components/ui/KnifeLogo";
 import { StatusIndicator } from "~/components/ui/StatusIndicator";
 import { PwaInstallButton } from "~/features/pwa/PwaInstallButton";
 import type { ConnectionStatus } from "~/features/terminal/TerminalTab";
@@ -124,9 +125,7 @@ export function TabBar({
       {/* Brand & Tabs */}
       <div className="flex items-center gap-1.5 overflow-x-auto h-full scrollbar-none py-1">
         <div className="flex items-center gap-1.5 px-2 text-[var(--accent)] font-bold text-sm tracking-wide mr-1">
-          <span className="text-sm select-none" role="img" aria-label="knife">
-            🔪
-          </span>
+          <KnifeLogo className="w-4 h-4 shrink-0" />
           <span className="font-mono">knife</span>
         </div>
 

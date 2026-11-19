@@ -1,4 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <title>Knife</title>
-  <text x="50%" y="54%" dominant-baseline="central" text-anchor="middle" font-size="400">🔪</text>
+  <defs>
+    <linearGradient id="knife-blade" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#E2E8F0" />
+      <stop offset="65%" stop-color="#94A3B8" />
+      <stop offset="100%" stop-color="#CBD5E1" />
+    </linearGradient>
+    <linearGradient id="knife-handle" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#475569" />
+      <stop offset="100%" stop-color="#1E293B" />
+    </linearGradient>
+  </defs>
+  <g transform="rotate(-45 256 256)">
+    <!-- Blade -->
+    <path d="M 38 228 L 306 218 L 306 296 Q 282 300 264 298 Q 144 298 38 228 Z" fill="url(#knife-blade)" />
+    <!-- Cutting edge highlight -->
+    <path d="M 44 229 Q 146 290 264 290 L 264 298 Q 144 298 38 228 Z" fill="#F8FAFC" />
+    <!-- Bolster -->
+    <rect x="298" y="216" width="24" height="46" rx="4" fill="#64748B" />
+    <!-- Handle -->
+    <path d="M 320 220 L 452 215 Q 474 215 474 238 Q 474 263 452 261 L 320 256 Z" fill="url(#knife-handle)" stroke="#64748B" stroke-width="3" />
+    <!-- Rivets -->
+    <circle cx="362" cy="238" r="7" fill="#CBD5E1" />
+    <circle cx="422" cy="238" r="7" fill="#CBD5E1" />
+  </g>
 </svg>
