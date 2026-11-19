@@ -159,6 +159,55 @@ Both space-separated (`knife service <cmd>`) and colon-separated (`knife service
 
 ---
 
+## 🩺 Diagnostics (`knife doctor`)
+
+Run read-only environment, configuration, security, and background service checks:
+
+```bash
+knife doctor
+```
+
+Checks include OS/platform support, Bun runtime (`>= 1.2.0`), client production build (`build/client`), login shell executability, native `Bun.Terminal` PTY allocation, `config.json` validity and file permissions (`0600`), auth/proxy hygiene, data directory writability and state files (`tabs.json`, `settings.json`), background service unit health and Linux user lingering, local `/health` endpoint probe, and npm registry version check.
+
+Exits with `0` when no checks fail (`pass`/`warn`/`info`), and `1` if any check fails. Secret fields (`githubClientSecret`, `sessionSecret`) are never printed.
+
+### Doctor Options
+
+- `--config <path>`: Path to `config.json` to inspect
+- `--host <ip>` / `-p, --port <port>`: Override listen host/port for local `/health` check
+- `--name <str>`: Background service name to inspect (default: `knife`)
+- `--user` / `--system`: Inspect user-level or system-wide background service
+- `--offline`: Skip the npm registry update check
+- `--json`: Emit a machine-readable JSON report
+
+---
+
+## 🔄 CLI Self-Update (`knife self-update`)
+
+Check for updates or upgrade `@kilip/knife` directly from the terminal:
+
+```bash
+# Check whether a newer version is available
+knife self-update --check
+
+# Upgrade to latest and automatically restart an active background service
+knife self-update
+```
+
+When an active background service is detected, `knife self-update` automatically restarts it after installing the update (unless `--no-restart` is passed). When running from a local git source checkout, it refuses to overwrite unless `--force` is specified.
+
+### Self-Update Options
+
+- `--check`: Query the npm registry without installing
+- `--version <ver>`: Install a specific version or dist-tag (default: `latest`)
+- `--pm <bun|npm>`: Override package manager (`bun` or `npm`, auto-detected by default)
+- `-f, --force`: Reinstall even if already up to date or running from a source checkout
+- `--no-restart`: Do not automatically restart an active background service
+- `--name <str>`: Background service name to inspect/restart (default: `knife`)
+- `--user` / `--system`: Target user-level or system-wide background service
+
+---
+
 ## 🌐 Reverse Proxy Setup (Caddy)
 
 Knife listens on plain HTTP behind a reverse proxy that terminates TLS. The public domain configured during setup governs the allowed WebSocket origins, CSP, and secure cookie attributes.
@@ -204,6 +253,8 @@ CLI Flags > Environment Variables > config.json > Defaults
 
 - `knife onboarding`: Start or attach to first-run setup mode and print the one-time setup URL and token to local stdout
 - `knife service <action>`: Manage background service (`install`, `uninstall`, `start`, `stop`, `status`, `restart`)
+- `knife doctor`: Run read-only diagnostics across runtime, build, shell/PTY, config, data dir, service, and server health (`--offline`, `--json`)
+- `knife self-update`: Check for or install `@kilip/knife` updates via `bun`/`npm` and restart an active background service (`--check`, `--version`, `--pm`, `--force`, `--no-restart`)
 - `--host <ip>`: Listen host (default: `127.0.0.1`)
 - `-p, --port <number>`: Listen port (default: `3000`)
 - `-d, --domain <domain>`: Public domain (default: `""` or `KNIFE_PUBLIC_DOMAIN`)

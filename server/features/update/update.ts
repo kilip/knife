@@ -4,6 +4,8 @@ import { join, resolve } from "node:path";
 import { getServiceManager } from "../../service/factory";
 import type { ServiceCliOptions } from "../../service/types";
 
+export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+
 export interface VersionParts {
   major: number;
   minor: number;
@@ -17,6 +19,7 @@ export interface VersionCheckResult {
   updateAvailable: boolean;
   publishedAt?: string;
   cached?: boolean;
+  error?: string;
 }
 
 export type PackageManager = "bun" | "npm";
@@ -80,56 +83,84 @@ export function compareSemver(a: string, b: string): number {
 }
 
 /**
- * Read current version from package.json
+ * Resolve the package root directory containing package.json.
  */
-export function getCurrentVersion(): string {
+export function getPackageRoot(): string {
+  return resolve(import.meta.dir, "../../..");
+}
+
+/**
+ * Check if Knife is running from a local git source checkout.
+ */
+export function isSourceCheckout(packageRoot: string = getPackageRoot()): boolean {
+  return existsSync(join(packageRoot, ".git"));
+}
+
+/**
+ * Validate a target npm version or dist-tag passed to self-update.
+ */
+export function isValidTargetVersion(value: string): boolean {
+  return /^[0-9A-Za-z][0-9A-Za-z._-]*$/.test(value) && !value.includes("..");
+}
+
+/**
+ * Read current version from package.json.
+ */
+export function getCurrentVersion(packageRoot: string = getPackageRoot()): string {
   try {
-    const pkgPath = resolve(import.meta.dir, "../package.json");
+    const pkgPath = join(packageRoot, "package.json");
     if (existsSync(pkgPath)) {
-      const data = JSON.parse(readFileSync(pkgPath, "utf-8"));
+      const data = JSON.parse(readFileSync(pkgPath, "utf-8")) as { version?: unknown };
       if (typeof data.version === "string") return data.version;
     }
   } catch {
     // fallback
   }
-  return "1.0.0";
+  return "0.0.0";
 }
 
 /**
- * Check npm registry for latest version of @kilip/knife.
- * Caches result in memory for 1 hour unless force is true.
+ * Check npm registry for target/latest version of @kilip/knife.
+ * Caches result in memory for 1 hour when distTag is "latest" unless force is true.
  */
 export async function checkLatestVersion(
   currentVersion: string = getCurrentVersion(),
   force: boolean = false,
-  fetchFn: typeof fetch = fetch,
+  fetchFn: FetchLike = fetch,
+  distTag: string = "latest",
 ): Promise<VersionCheckResult> {
   const now = Date.now();
-  if (!force && cachedCheckResult && now - cachedCheckResult.timestamp < CACHE_TTL_MS) {
+  const useCache = distTag === "latest";
+  if (useCache && !force && cachedCheckResult && now - cachedCheckResult.timestamp < CACHE_TTL_MS) {
     return {
       ...cachedCheckResult.result,
       cached: true,
     };
   }
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
-
-    const res = await fetchFn("https://registry.npmjs.org/@kilip/knife/latest", {
-      headers: {
-        Accept: "application/json",
+    const res = await fetchFn(
+      `https://registry.npmjs.org/@kilip/knife/${encodeURIComponent(distTag)}`,
+      {
+        headers: {
+          Accept: "application/json",
+        },
+        signal: controller.signal,
       },
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
+    );
 
     if (!res.ok) {
       throw new Error(`Registry responded with HTTP ${res.status}`);
     }
 
-    const data = (await res.json()) as { version?: string; time?: { modified?: string } };
-    const latestVersion = data.version || currentVersion;
+    const data = (await res.json()) as { version?: unknown; time?: { modified?: string } };
+    if (typeof data.version !== "string" || data.version.length === 0) {
+      throw new Error("Registry response missing version");
+    }
+
+    const latestVersion = data.version;
     const updateAvailable = compareSemver(latestVersion, currentVersion) > 0;
 
     const result: VersionCheckResult = {
@@ -139,29 +170,56 @@ export async function checkLatestVersion(
       cached: false,
     };
 
-    cachedCheckResult = {
-      result,
-      timestamp: now,
-    };
+    if (useCache) {
+      cachedCheckResult = {
+        result,
+        timestamp: now,
+      };
+    }
 
     return result;
   } catch (err: unknown) {
-    // If registry check fails, return current version as latest with updateAvailable false
+    const msg = err instanceof Error ? err.message : String(err);
     const fallback: VersionCheckResult = {
       currentVersion,
       latestVersion: currentVersion,
       updateAvailable: false,
       cached: false,
+      error: msg,
     };
     return fallback;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
 /**
- * Clear the version check cache (mainly for testing)
+ * Clear the version check cache (mainly for testing).
  */
 export function clearVersionCache(): void {
   cachedCheckResult = null;
+}
+
+/**
+ * Construct package manager command metadata for updating @kilip/knife.
+ */
+export function buildPackageManagerInfo(
+  type: PackageManager,
+  targetVersion: string = "latest",
+): PackageManagerInfo {
+  if (type === "bun") {
+    return {
+      type: "bun",
+      command: "bun",
+      args: ["add", "-g", `@kilip/knife@${targetVersion}`],
+    };
+  }
+
+  return {
+    type: "npm",
+    command: "npm",
+    args: ["install", "-g", `@kilip/knife@${targetVersion}`],
+  };
 }
 
 /**
@@ -171,21 +229,10 @@ export function detectPackageManager(
   execPath: string = process.execPath,
   env: NodeJS.ProcessEnv = process.env,
   isBunRuntime: boolean = typeof Bun !== "undefined",
+  targetVersion: string = "latest",
 ): PackageManagerInfo {
   const isBun = isBunRuntime || execPath.toLowerCase().includes("bun") || !!env.BUN_INSTALL;
-  if (isBun) {
-    return {
-      type: "bun",
-      command: "bun",
-      args: ["add", "-g", "@kilip/knife@latest"],
-    };
-  }
-
-  return {
-    type: "npm",
-    command: "npm",
-    args: ["install", "-g", "@kilip/knife@latest"],
-  };
+  return buildPackageManagerInfo(isBun ? "bun" : "npm", targetVersion);
 }
 
 /**

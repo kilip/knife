@@ -3,7 +3,13 @@ import { join } from "node:path";
 import { buildResolvedServiceContext } from "./config";
 import { getServiceManager } from "./factory";
 import { defaultRunner } from "./runner";
-import type { CommandRunner, ServiceAction, ServiceCliOptions, ServiceStatusResult } from "./types";
+import type {
+  CommandRunner,
+  ServiceAction,
+  ServiceCliOptions,
+  ServiceManager,
+  ServiceStatusResult,
+} from "./types";
 
 export * from "./config";
 export * from "./factory";
@@ -308,4 +314,95 @@ export async function handleServiceCommand(
   }
 
   return true;
+}
+
+export interface DetectedServiceInfo {
+  supported: boolean;
+  displayName?: string;
+  system?: boolean;
+  manager?: ServiceManager;
+  status?: ServiceStatusResult;
+  error?: string;
+}
+
+/**
+ * Detects an installed Knife background service (user-level first, then system-wide
+ * unless `system` is explicitly specified).
+ */
+export async function detectInstalledService(options?: {
+  name?: string;
+  system?: boolean;
+  platform?: NodeJS.Platform;
+  runner?: CommandRunner;
+}): Promise<DetectedServiceInfo> {
+  const name = options?.name ?? "knife";
+  const platform = options?.platform ?? process.platform;
+  const runner = options?.runner ?? defaultRunner;
+
+  let manager: ServiceManager;
+  try {
+    manager = getServiceManager(platform, runner);
+  } catch (err: unknown) {
+    const error = err instanceof Error ? err.message : String(err);
+    return { supported: false, error };
+  }
+
+  if (options?.system !== undefined) {
+    const status = await manager.status({
+      action: "status",
+      name,
+      system: options.system,
+      env: {},
+      help: false,
+    });
+    return {
+      supported: true,
+      displayName: manager.displayName,
+      system: options.system,
+      manager,
+      status,
+    };
+  }
+
+  const userStatus = await manager.status({
+    action: "status",
+    name,
+    system: false,
+    env: {},
+    help: false,
+  });
+  if (userStatus.installed) {
+    return {
+      supported: true,
+      displayName: manager.displayName,
+      system: false,
+      manager,
+      status: userStatus,
+    };
+  }
+
+  const sysStatus = await manager.status({
+    action: "status",
+    name,
+    system: true,
+    env: {},
+    help: false,
+  });
+  if (sysStatus.installed) {
+    return {
+      supported: true,
+      displayName: manager.displayName,
+      system: true,
+      manager,
+      status: sysStatus,
+    };
+  }
+
+  return {
+    supported: true,
+    displayName: manager.displayName,
+    system: false,
+    manager,
+    status: userStatus,
+  };
 }

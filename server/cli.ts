@@ -1,4 +1,6 @@
 import { type KnifeConfig, parseCliArgs } from "./config";
+import { handleDoctorCommand } from "./features/doctor/cli";
+import { handleSelfUpdateCommand } from "./features/update/cli";
 import { handleServiceCommand } from "./service";
 import { getServiceManager } from "./service/factory";
 
@@ -12,6 +14,8 @@ Usage: knife [command] [options]
 Commands:
   onboarding            Start or attach to first-run setup and print the setup URL
   service <action>      Manage background service (install, uninstall, start, stop, status, restart)
+  doctor                Run diagnostics and verify runtime, config, and service health
+  self-update           Check for updates or upgrade @kilip/knife via package manager
 
 Options:
   --host <ip>           Listen host address (default: 127.0.0.1 or KNIFE_HOST)
@@ -124,6 +128,14 @@ export async function parseCliOrExit(argv: string[]) {
   try {
     if (await handleServiceCommand(argv)) {
       process.exit(0);
+    }
+    const doctorCode = await handleDoctorCommand(argv);
+    if (doctorCode !== null) {
+      process.exit(doctorCode);
+    }
+    const updateCode = await handleSelfUpdateCommand(argv);
+    if (updateCode !== null) {
+      process.exit(updateCode);
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

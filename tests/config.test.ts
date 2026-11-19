@@ -55,8 +55,8 @@ describe("Server Config & CLI Parser", () => {
     expect(parsed.port).toBe(4000);
   });
   it("captures unknown arguments and commands", () => {
-    const parsed = parseCliArgs(["doctor"]);
-    expect(parsed.unknown).toEqual(["doctor"]);
+    const parsed = parseCliArgs(["unknown-cmd"]);
+    expect(parsed.unknown).toEqual(["unknown-cmd"]);
 
     const parsedMixed = parseCliArgs(["--port", "3000", "bogus", "--foo"]);
     expect(parsedMixed.port).toBe(3000);
