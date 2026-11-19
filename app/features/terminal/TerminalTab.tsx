@@ -1,5 +1,5 @@
-import { Upload } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Loader2, Upload } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { type ConnectionStatus, useTerminalSocket } from "~/features/terminal/useTerminalSocket";
 import { useXterm, type XtermOptions } from "~/features/terminal/useXterm";
 
@@ -35,8 +35,16 @@ export function TerminalTab({
 }: TerminalTabProps) {
   const { theme } = xtermOptions;
   const containerRef = useRef<HTMLDivElement>(null);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("connecting");
   const [isDragOver, setIsDragOver] = useState(false);
   const dragCounterRef = useRef(0);
+  const onStatusChangeRef = useRef(onStatusChange);
+  onStatusChangeRef.current = onStatusChange;
+
+  const handleStatusChange = useCallback((status: ConnectionStatus) => {
+    setConnectionStatus(status);
+    onStatusChangeRef.current?.(status);
+  }, []);
 
   // xterm callbacks are bound to the socket below (declared after xterm so the
   // terminal exists before the socket connects).
@@ -54,7 +62,7 @@ export function TerminalTab({
     tabId,
     termRef,
     fitAddonRef,
-    onStatusChange,
+    onStatusChange: handleStatusChange,
     onProcessExit,
   });
   socketRef.current = socket;
@@ -131,6 +139,18 @@ export function TerminalTab({
       style={{ backgroundColor: theme.ui.bgBase }}
     >
       <div ref={containerRef} className="h-full w-full" />
+      {(connectionStatus === "connecting" || connectionStatus === "reconnecting") && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-[var(--bg-base)]/75 backdrop-blur-xs pointer-events-none">
+          <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)]/95 shadow-lg text-xs font-medium text-[var(--fg-base)]">
+            <Loader2 className="w-4 h-4 animate-spin text-[var(--accent)]" />
+            <span>
+              {connectionStatus === "reconnecting"
+                ? "Reconnecting to server..."
+                : "Connecting to server..."}
+            </span>
+          </div>
+        </div>
+      )}
       {isDragOver && (
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[var(--accent)]/15 border-2 border-dashed border-[var(--accent)] backdrop-blur-xs pointer-events-none">
           <Upload className="w-12 h-12 text-[var(--accent)] animate-bounce mb-2" />
