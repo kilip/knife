@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.6.0-rc2](https://github.com/kilip/knife/compare/v0.6.0-rc1...v0.6.0-rc2) (2026-11-19)
+
+
+### Features
+
+* ✨ show connecting overlay in terminal tab ([92028cc](https://github.com/kilip/knife/commit/92028cc5a624f3c66f615d09633048febbb217f0))
+
+
+### Bug Fixes
+
+* 🐛 allow inline spa bootstrap scripts via csp nonce ([a298549](https://github.com/kilip/knife/commit/a298549cab2e0d586c753119db6d734c295ec807))
+* 🐛 keep websocket alive in background and restore focus ([fc7c50c](https://github.com/kilip/knife/commit/fc7c50c86f60865ae87cd12b23a7cab8f61ec89a))
+* 🐛 preserve child processes across systemd restarts ([eb00955](https://github.com/kilip/knife/commit/eb00955ffcc189c710312550132a76b6e0cd1378))
+* 🐛 remove broken first-run redirect check on setup page ([7d03c45](https://github.com/kilip/knife/commit/7d03c45740b9ebc3617a6459156e8682b1bfd59c))
+* 🐛 reset terminal before replaying reconnect snapshot ([b1a8379](https://github.com/kilip/knife/commit/b1a837918261a5e4ade39db48213093d0e33318d))
+
+
+### Miscellaneous Chores
+
+* 🔧 release 0.6.0-rc2 ([c09d237](https://github.com/kilip/knife/commit/c09d237aa07d3f0385b2b959973cda76e05bb42c))
+
 ## [0.6.0-rc1](https://github.com/kilip/knife/compare/v0.5.0...v0.6.0-rc1) (2026-11-18)
 
 
