@@ -1,6 +1,6 @@
 {
   "name": "@kilip/knife",
-  "version": "0.6.0-rc3",
+  "version": "0.6.0-rc4",
   "type": "module",
   "bin": {
     "knife": "bin/knife.js"
