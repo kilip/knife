@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0-rc2](https://github.com/kilip/knife/compare/v0.6.0-rc2...v0.7.0-rc2) (2026-11-19)
+
+
+### Features
+
+* ✨ add doctor and self-update cli commands ([7c6c07c](https://github.com/kilip/knife/commit/7c6c07c07a50f9668d5dbd1fbbe8ca47ba871b0b))
+
 ## [0.6.0-rc2](https://github.com/kilip/knife/compare/v0.6.0-rc1...v0.6.0-rc2) (2026-11-19)
 
 
