@@ -8,7 +8,8 @@ const RECONNECT_BASE_MS = 1000;
 const RECONNECT_FACTOR = 1.5;
 const RECONNECT_MAX_MS = 15000;
 const HEARTBEAT_INTERVAL_MS = 15000;
-const PONG_TIMEOUT_MS = 10000;
+export const PONG_TIMEOUT_MS = 10000;
+export const RESUME_PING_TIMEOUT_MS = 2000;
 
 /** Exponential backoff delay for the given zero-based reconnect attempt. */
 export function getReconnectDelay(attempt: number): number {
@@ -69,18 +70,41 @@ export function useTerminalSocket({
       }
     };
 
-    const sendPing = (ws: WebSocket) => {
-      if (ws.readyState !== WebSocket.OPEN) return;
-      ws.send(JSON.stringify({ type: "ping" }));
-      if (pongTimeoutTimer === undefined) {
-        pongTimeoutTimer = setTimeout(() => {
-          pongTimeoutTimer = undefined;
-          if (!isDisposed && wsRef.current === ws && ws.readyState === WebSocket.OPEN) {
-            console.warn("[ws] Heartbeat timeout, reconnecting...");
-            ws.close();
-          }
-        }, PONG_TIMEOUT_MS);
+    const forceReconnect = (ws: WebSocket) => {
+      clearInterval(heartbeatTimer);
+      clearPongTimeout();
+      clearTimeout(reconnectTimer);
+      if (isDisposed || wsRef.current !== ws) return;
+      // Detach immediately so a hung zombie socket's late onclose is ignored
+      wsRef.current = null;
+      try {
+        ws.close();
+      } catch {}
+      if (shouldReconnect) {
+        reconnectAttempts = 0;
+        connect();
       }
+    };
+
+    const sendPing = (ws: WebSocket, timeoutMs = PONG_TIMEOUT_MS) => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      try {
+        ws.send(JSON.stringify({ type: "ping" }));
+      } catch {
+        forceReconnect(ws);
+        return;
+      }
+      if (pongTimeoutTimer !== undefined) {
+        if (timeoutMs >= PONG_TIMEOUT_MS) return;
+        clearPongTimeout();
+      }
+      pongTimeoutTimer = setTimeout(() => {
+        pongTimeoutTimer = undefined;
+        if (!isDisposed && wsRef.current === ws) {
+          console.warn("[ws] Heartbeat timeout, reconnecting...");
+          forceReconnect(ws);
+        }
+      }, timeoutMs);
     };
 
     function connect() {
@@ -176,32 +200,37 @@ export function useTerminalSocket({
       };
     }
 
-    const ensureConnected = () => {
+    const ensureConnected = (fastCheck = false) => {
       if (isDisposed || !shouldReconnect) return;
       const ws = wsRef.current;
       if (!ws || (ws.readyState !== WebSocket.OPEN && ws.readyState !== WebSocket.CONNECTING)) {
         reconnectAttempts = 0;
         connect();
       } else if (ws.readyState === WebSocket.OPEN) {
-        sendPing(ws);
+        sendPing(ws, fastCheck ? RESUME_PING_TIMEOUT_MS : PONG_TIMEOUT_MS);
       }
     };
 
+    const handleResume = () => ensureConnected(true);
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        ensureConnected();
+        handleResume();
       }
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("online", ensureConnected);
+    window.addEventListener("pageshow", handleResume);
+    window.addEventListener("focus", handleResume);
+    window.addEventListener("online", handleResume);
 
     connect();
 
     return () => {
       isDisposed = true;
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("online", ensureConnected);
+      window.removeEventListener("pageshow", handleResume);
+      window.removeEventListener("focus", handleResume);
+      window.removeEventListener("online", handleResume);
       clearTimeout(reconnectTimer);
       clearInterval(heartbeatTimer);
       clearPongTimeout();

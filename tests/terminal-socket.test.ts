@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { getReconnectDelay } from "../app/features/terminal/useTerminalSocket";
+import {
+  getReconnectDelay,
+  PONG_TIMEOUT_MS,
+  RESUME_PING_TIMEOUT_MS,
+} from "../app/features/terminal/useTerminalSocket";
 
 describe("getReconnectDelay", () => {
   it("starts at 1000ms for the first attempt", () => {
@@ -20,5 +24,13 @@ describe("getReconnectDelay", () => {
   it("resets to the initial delay when attempts reset to 0", () => {
     expect(getReconnectDelay(5)).toBeGreaterThan(getReconnectDelay(0));
     expect(getReconnectDelay(0)).toBe(1000);
+  });
+});
+
+describe("heartbeat timeouts", () => {
+  it("uses a shorter resume ping timeout than the steady-state pong timeout", () => {
+    expect(RESUME_PING_TIMEOUT_MS).toBeGreaterThan(0);
+    expect(RESUME_PING_TIMEOUT_MS).toBeLessThan(PONG_TIMEOUT_MS);
+    expect(RESUME_PING_TIMEOUT_MS).toBeLessThanOrEqual(3000);
   });
 });

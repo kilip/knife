@@ -220,15 +220,35 @@ export function useXterm({
       }
     };
 
+    const refreshTerminal = () => {
+      try {
+        fitAddonRef.current?.fit();
+        const term = termRef.current;
+        if (term) {
+          term.refresh(0, term.rows - 1);
+          if (term.cols && term.rows) {
+            callbacksRef.current.onResize(term.cols, term.rows);
+          }
+        }
+      } catch {}
+    };
+
+    const handleResume = () => {
+      restoreFocus();
+      refreshTerminal();
+    };
+
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") restoreFocus();
+      if (document.visibilityState === "visible") handleResume();
     };
 
     window.addEventListener("focus", restoreFocus);
+    window.addEventListener("pageshow", handleResume);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       clearTimeout(timer);
       window.removeEventListener("focus", restoreFocus);
+      window.removeEventListener("pageshow", handleResume);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [isActive]);
@@ -238,6 +258,7 @@ export function useXterm({
     const container = containerRef.current;
     if (!container) return;
 
+    let isDisposed = false;
     let resizeDebounceTimer: number | NodeJS.Timeout | undefined;
 
     const term = new Terminal({
@@ -261,17 +282,30 @@ export function useXterm({
 
     term.open(container);
 
-    // Renderer with fallback: WebGL -> Canvas -> DOM
-    try {
-      const webglAddon = new WebglAddon();
-      webglAddon.onContextLoss(() => webglAddon.dispose());
-      term.loadAddon(webglAddon);
-    } catch {
+    const loadCanvasFallback = () => {
+      if (isDisposed) return;
       try {
         term.loadAddon(new CanvasAddon());
       } catch {
         // Fallback to default DOM renderer
       }
+    };
+
+    // Renderer with fallback: WebGL -> Canvas -> DOM
+    try {
+      const webglAddon = new WebglAddon();
+      webglAddon.onContextLoss(() => {
+        webglAddon.dispose();
+        loadCanvasFallback();
+        if (!isDisposed) {
+          try {
+            term.refresh(0, term.rows - 1);
+          } catch {}
+        }
+      });
+      term.loadAddon(webglAddon);
+    } catch {
+      loadCanvasFallback();
     }
 
     // OSC 52 clipboard handler (Pc;Pd where Pd is base64 clipboard content)
@@ -329,6 +363,7 @@ export function useXterm({
     }, 100);
 
     return () => {
+      isDisposed = true;
       clearTimeout(resizeDebounceTimer);
       clearTimeout(initialFitTimer);
       detachTouchScroll();
