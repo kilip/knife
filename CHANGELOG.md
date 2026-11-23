@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.6.0-rc4](https://github.com/kilip/knife/compare/v0.6.0-rc3...v0.6.0-rc4) (2026-11-23)
+
+
+### Bug Fixes
+
+* 🐛 recover terminal websocket and renderer on resume ([a4590f4](https://github.com/kilip/knife/commit/a4590f468496dda3bde6adca398518108d1507b4))
+* 🐛 unify knife brand logo with vector svg ([a2f69db](https://github.com/kilip/knife/commit/a2f69dbbd30853913e68bbe5da8dc91d5a50991a))
+
+
+### Miscellaneous Chores
+
+* 🔧 release 0.6.0-rc4 ([aa2dc3c](https://github.com/kilip/knife/commit/aa2dc3c4e9017fc24e95ff11b31b32ebdcd0782a))
+
 ## [0.6.0-rc3](https://github.com/kilip/knife/compare/v0.7.0-rc2...v0.6.0-rc3) (2026-11-19)
 
 
