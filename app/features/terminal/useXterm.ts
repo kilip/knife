@@ -6,6 +6,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
 import { type RefObject, useEffect, useRef } from "react";
 import "@xterm/xterm/css/xterm.css";
+import { isSafeHttpUrl } from "~/features/terminal/UrlActionPopover";
 import type { KnifeTheme } from "~/features/theme/themes";
 
 export interface XtermOptions {
@@ -27,6 +28,8 @@ interface UseXtermOptions extends XtermOptions {
   onData: (data: string) => void;
   onResize: (cols: number, rows: number) => void;
   onRefresh: () => void;
+  onLinkClick?: (url: string, clientX: number, clientY: number) => void;
+  onLinkDismiss?: () => void;
 }
 
 const writeClipboard = (text: string) => navigator.clipboard?.writeText(text).catch(() => {});
@@ -122,6 +125,8 @@ export function useXterm({
   onData,
   onResize,
   onRefresh,
+  onLinkClick,
+  onLinkDismiss,
   theme,
   fontSize,
   fontFamily,
@@ -135,11 +140,11 @@ export function useXterm({
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const isActiveRef = useRef(isActive);
-  const callbacksRef = useRef({ onData, onResize, onRefresh });
+  const callbacksRef = useRef({ onData, onResize, onRefresh, onLinkClick, onLinkDismiss });
   useEffect(() => {
     isActiveRef.current = isActive;
-    callbacksRef.current = { onData, onResize, onRefresh };
-  }, [isActive, onData, onResize, onRefresh]);
+    callbacksRef.current = { onData, onResize, onRefresh, onLinkClick, onLinkDismiss };
+  }, [isActive, onData, onResize, onRefresh, onLinkClick, onLinkDismiss]);
 
   // Fit and report dimensions to the backend.
   const fitAndResize = () => {
@@ -261,6 +266,15 @@ export function useXterm({
     let isDisposed = false;
     let resizeDebounceTimer: number | NodeJS.Timeout | undefined;
 
+    const handleLinkActivate = (event: MouseEvent, uri: string) => {
+      if (!isSafeHttpUrl(uri)) return;
+      if (event.ctrlKey || event.metaKey) {
+        window.open(uri, "_blank", "noopener,noreferrer");
+        return;
+      }
+      callbacksRef.current.onLinkClick?.(uri, event.clientX, event.clientY);
+    };
+
     const term = new Terminal({
       cursorBlink: cursorBlink ?? true,
       cursorStyle: cursorStyle ?? "block",
@@ -270,13 +284,17 @@ export function useXterm({
       theme: theme.terminal,
       allowProposedApi: true,
       scrollback: scrollback ?? 50000,
+      linkHandler: {
+        activate: handleLinkActivate,
+        allowNonHttpProtocols: false,
+      },
     });
     termRef.current = term;
 
     const fitAddon = new FitAddon();
     fitAddonRef.current = fitAddon;
     term.loadAddon(fitAddon);
-    term.loadAddon(new WebLinksAddon());
+    term.loadAddon(new WebLinksAddon(handleLinkActivate));
     term.loadAddon(new Unicode11Addon());
     term.unicode.activeVersion = "11";
 
@@ -338,6 +356,7 @@ export function useXterm({
     term.attachCustomKeyEventHandler((e) => handleAppKey(e, term));
 
     const onDataDisposable = term.onData((data) => callbacksRef.current.onData(data));
+    const onScrollDisposable = term.onScroll(() => callbacksRef.current.onLinkDismiss?.());
 
     // Debounced container ResizeObserver
     const resizeObserver = new ResizeObserver(() => {
@@ -369,6 +388,7 @@ export function useXterm({
       detachTouchScroll();
       resizeObserver.disconnect();
       onDataDisposable.dispose();
+      onScrollDisposable.dispose();
       try {
         term.dispose();
       } catch {}

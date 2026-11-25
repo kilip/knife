@@ -1,5 +1,6 @@
 import { Loader2, Upload } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { clampPopoverPosition, UrlActionPopover } from "~/features/terminal/UrlActionPopover";
 import { type ConnectionStatus, useTerminalSocket } from "~/features/terminal/useTerminalSocket";
 import { useXterm, type XtermOptions } from "~/features/terminal/useXterm";
 
@@ -37,6 +38,9 @@ export function TerminalTab({
   const containerRef = useRef<HTMLDivElement>(null);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("connecting");
   const [isDragOver, setIsDragOver] = useState(false);
+  const [linkPopover, setLinkPopover] = useState<{ url: string; left: number; top: number } | null>(
+    null,
+  );
   const dragCounterRef = useRef(0);
   const onStatusChangeRef = useRef(onStatusChange);
   onStatusChangeRef.current = onStatusChange;
@@ -49,15 +53,38 @@ export function TerminalTab({
   // xterm callbacks are bound to the socket below (declared after xterm so the
   // terminal exists before the socket connects).
   const socketRef = useRef<ReturnType<typeof useTerminalSocket> | null>(null);
+  const handleLinkClick = useCallback((url: string, clientX: number, clientY: number) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const { left, top } = clampPopoverPosition(
+      clientX - rect.left,
+      clientY - rect.top,
+      rect.width,
+      rect.height,
+    );
+    setLinkPopover({ url, left, top });
+  }, []);
+  const handleLinkDismiss = useCallback(() => {
+    setLinkPopover(null);
+  }, []);
   const { termRef, fitAddonRef } = useXterm({
     ...xtermOptions,
     tabId,
     isActive,
     containerRef,
-    onData: (data) => socketRef.current?.sendInput(data),
+    onData: (data) => {
+      setLinkPopover(null);
+      socketRef.current?.sendInput(data);
+    },
     onResize: (cols, rows) => socketRef.current?.sendResize(cols, rows),
     onRefresh: () => socketRef.current?.sendRefresh(),
+    onLinkClick: handleLinkClick,
+    onLinkDismiss: handleLinkDismiss,
   });
+  const closeLinkPopover = useCallback(() => {
+    setLinkPopover(null);
+    termRef.current?.focus();
+  }, [termRef]);
   const socket = useTerminalSocket({
     tabId,
     termRef,
@@ -139,6 +166,14 @@ export function TerminalTab({
       style={{ backgroundColor: theme.ui.bgBase }}
     >
       <div ref={containerRef} className="h-full w-full" />
+      {linkPopover && (
+        <UrlActionPopover
+          url={linkPopover.url}
+          left={linkPopover.left}
+          top={linkPopover.top}
+          onClose={closeLinkPopover}
+        />
+      )}
       {(connectionStatus === "connecting" || connectionStatus === "reconnecting") && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-[var(--bg-base)]/75 backdrop-blur-xs pointer-events-none">
           <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)]/95 shadow-lg text-xs font-medium text-[var(--fg-base)]">

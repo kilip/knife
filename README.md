@@ -9,7 +9,7 @@ A single-user self-hosted web terminal with multi-tab support, PWA, and integrat
 - **Native Bun PTY**: Uses Bun's native `Bun.Terminal` PTY engine spawning your login shell (`$SHELL -l`) directly — no native C++ addons or `node-pty` required.
 - **Resilient WebSockets**: Disconnecting or refreshing the page keeps the PTY alive for a 60-second grace period and replays a server-side screen snapshot (plus bounded scrollback) on reconnect. Auto-reconnect with exponential backoff and application-level ping/pong heartbeats.
 - **React Router 8 + Tailwind CSS**: Clean single-page application built on React Router 8 (framework mode, `ssr: false`) with CSS-variable-driven theming.
-- **Full xterm.js feature set**: Fit, WebLinks, WebGL with Canvas/DOM fallbacks, Unicode 11, OSC 52 clipboard sync, truecolor (24-bit), and mouse reporting.
+- **Full xterm.js feature set**: Fit, clickable/copyable WebLinks (popover with Open & Copy on click/tap, direct open on `Ctrl`/`Cmd` + Click), WebGL with Canvas/DOM fallbacks, Unicode 11, OSC 52 clipboard sync, truecolor (24-bit), and mouse reporting.
 - **5 Built-in Themes**: Catppuccin Mocha (default), Tokyo Night, Nord, Gruvbox Dark, and Dracula. One unified definition powers both Tailwind UI tokens and the 16-color terminal palette, with zero flash on initial load.
 - **Single-User Security**: GitHub OAuth 2.0 restricted to a single configured username, automatically pinned to the account's numeric GitHub user ID (`allowedUserId`) on first login. First-run wizard protected by a one-time console setup token.
 - **Progressive Web App (PWA)**: Serwist-powered service worker with precached application shell, standalone installability, offline banner, safe-area insets, and dynamic theme-color meta synchronization.
@@ -308,6 +308,8 @@ CLI Flags > Environment Variables > config.json > Defaults
 | <kbd>Ctrl</kbd> + <kbd>E</kbd>                                            | Toggle file browser sidebar                 |
 | <kbd>Ctrl</kbd> / <kbd>Cmd</kbd> + <kbd>H</kbd>                           | Toggle hidden files in file browser         |
 | <kbd>Ctrl</kbd> / <kbd>Cmd</kbd> + <kbd>,</kbd>                           | Open user settings page                     |
+| Click / tap terminal URL                                                  | Open URL action popover (Open / Copy)       |
+| <kbd>Ctrl</kbd> / <kbd>Cmd</kbd> + Click terminal URL                     | Open terminal URL directly in a new tab     |
 
 ---
 
