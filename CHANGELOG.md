@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.6.0-rc5](https://github.com/kilip/knife/compare/v0.6.0-rc4...v0.6.0-rc5) (2026-11-25)
+
+
+### Features
+
+* ✨ add terminal url action popover ([344ca77](https://github.com/kilip/knife/commit/344ca77f8aa7f58f308a8c8fdc408718bdf25314))
+
+
+### Bug Fixes
+
+* 🐛 preserve child tmux processes across systemd restarts ([337c904](https://github.com/kilip/knife/commit/337c90491881ca66a92a9423d0d2b7f6ba9d221f))
+
+
+### Miscellaneous Chores
+
+* 🔧 release 0.6.0-rc5 ([4d427c6](https://github.com/kilip/knife/commit/4d427c6c92825a60afe8d444adda25db0446fc2b))
+
 ## [0.6.0-rc4](https://github.com/kilip/knife/compare/v0.6.0-rc3...v0.6.0-rc4) (2026-11-23)
 
 
