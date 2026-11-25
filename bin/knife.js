@@ -1,6 +1,6 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,17 +12,45 @@ if (typeof Bun !== "undefined") {
   await import(serverPath);
 } else {
   // Running under Node.js, delegate to Bun
-  const result = spawnSync("bun", ["run", serverPath, ...process.argv.slice(2)], {
+  const child = spawn("bun", ["run", serverPath, ...process.argv.slice(2)], {
     stdio: "inherit",
   });
-  if (result.error) {
-    if (result.error.code === "ENOENT") {
+
+  const signals = ["SIGTERM", "SIGINT", "SIGHUP"];
+  const handlers = new Map();
+  for (const signal of signals) {
+    const handler = () => {
+      if (!child.killed) {
+        child.kill(signal);
+      }
+    };
+    handlers.set(signal, handler);
+    process.on(signal, handler);
+  }
+
+  const cleanupHandlers = () => {
+    for (const [signal, handler] of handlers) {
+      process.off(signal, handler);
+    }
+  };
+
+  child.on("error", (err) => {
+    cleanupHandlers();
+    if (err.code === "ENOENT") {
       console.error("\x1b[31mError: 'bun' was not found in your PATH.\x1b[0m");
       console.error("knife requires Bun (v1.2+) to run.");
       console.error("Please install Bun from https://bun.sh or add it to PATH.");
       process.exit(1);
     }
-    throw result.error;
-  }
-  process.exit(result.status ?? 0);
+    throw err;
+  });
+
+  child.on("exit", (code, signal) => {
+    cleanupHandlers();
+    if (signal) {
+      process.kill(process.pid, signal);
+      return;
+    }
+    process.exit(code ?? 0);
+  });
 }

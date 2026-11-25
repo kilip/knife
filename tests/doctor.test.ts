@@ -212,6 +212,21 @@ ExecStart="/opt/my bun/bin/bun" run "/srv/my knife/server/index.ts" --config "/e
     });
   });
 
+  it("recognizes direct knife binary invocations in ExecStart without false warnings", () => {
+    const unitDirect = `[Service]
+ExecStart=/home/user/.bun/bin/knife --config /etc/knife/config.json
+`;
+    expect(extractServiceUnitPaths(unitDirect, "linux")).toEqual({});
+
+    const unitWrapper = `[Service]
+ExecStart=/home/user/.bun/bin/bun run /home/user/.bun/bin/knife.js --port 3000
+`;
+    expect(extractServiceUnitPaths(unitWrapper, "linux")).toEqual({
+      bunPath: "/home/user/.bun/bin/bun",
+      entrypointPath: undefined,
+    });
+  });
+
   it("extracts paths from macOS launchd plist with XML entities", () => {
     const plist = `<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0">
@@ -462,7 +477,7 @@ describe("Doctor Diagnostic Checks", () => {
 
     writeFileSync(
       unitPath,
-      `[Service]\nExecStart=${fixture.bunPath} run ${entrypointPath} --config ${fixture.configPath}\n`,
+      `[Service]\nExecStart=${fixture.bunPath} run ${entrypointPath} --config ${fixture.configPath}\nKillMode=process\n`,
     );
 
     const origHome = process.env.HOME;
@@ -558,6 +573,20 @@ describe("Doctor Diagnostic Checks", () => {
       expect(missingEntryReport.checks.find((c) => c.id === "service")?.message).toContain(
         "entrypoint missing",
       );
+
+      // 7. Linux systemd unit missing KillMode=process -> warn
+      writeFileSync(
+        unitPath,
+        `[Service]\nExecStart=${fixture.bunPath} run ${entrypointPath} --config ${fixture.configPath}\n`,
+      );
+      const missingKillModeReport = await runDoctorChecks(
+        { ...fixture.options, serviceName },
+        { ...fixture.deps, runner: runnerOk },
+      );
+      const killModeCheck = missingKillModeReport.checks.find((c) => c.id === "service");
+      expect(killModeCheck?.status).toBe("warn");
+      expect(killModeCheck?.message).toContain("KillMode=process");
+      expect(killModeCheck?.hint).toContain("knife service");
     } finally {
       process.env.HOME = origHome;
       rmSync(fixture.root, { recursive: true, force: true });

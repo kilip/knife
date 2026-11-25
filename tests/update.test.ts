@@ -677,9 +677,17 @@ describe("Self-Update CLI Execution", () => {
         },
       );
       expect(restartOk).toBe(0);
-      expect(runner1.calls.some((c) => c.cmd === "systemctl" && c.args.includes("restart"))).toBe(
-        true,
+      const reloadIdx = runner1.calls.findIndex(
+        (c) => c.cmd === "systemctl" && c.args.includes("daemon-reload"),
       );
+      const restartIdx = runner1.calls.findIndex(
+        (c) => c.cmd === "systemctl" && c.args.includes("restart"),
+      );
+      expect(reloadIdx).toBeGreaterThanOrEqual(0);
+      expect(restartIdx).toBeGreaterThan(reloadIdx);
+      const updatedUnit = readFileSync(join(unitDir, `${serviceName}.service`), "utf-8");
+      expect(updatedUnit).toContain("KillMode=process");
+      expect(updatedUnit).toContain("ExecStart=/usr/bin/bun");
       expect(logs1.join("\n")).toContain(`Restarted background service '${serviceName}'`);
 
       // --no-restart skips systemctl restart

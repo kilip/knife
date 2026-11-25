@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import { dirname, join } from "node:path";
 import { defaultRunner } from "../runner";
@@ -62,6 +62,41 @@ ${envLines}
 [Install]
 WantedBy=${wantedBy}
 `;
+}
+
+/**
+ * Returns the line range [start, end) of the [Service] section body, or null if absent.
+ */
+function findServiceSectionRange(lines: string[]): { start: number; end: number } | null {
+  const headerIdx = lines.findIndex((line) => /^\s*\[Service\]\s*$/i.test(line));
+  if (headerIdx === -1) return null;
+
+  let end = lines.length;
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    if (/^\s*\[.+\]\s*$/.test(lines[i])) {
+      end = i;
+      break;
+    }
+  }
+  return { start: headerIdx, end };
+}
+
+/**
+ * Checks whether a systemd unit file sets KillMode=process in its [Service] section.
+ */
+export function hasProcessKillMode(unitContent: string): boolean {
+  const lines = unitContent.split(/\r?\n/);
+  const range = findServiceSectionRange(lines);
+  if (!range) return false;
+
+  let effectiveKillMode: string | undefined;
+  for (let i = range.start + 1; i < range.end; i++) {
+    const match = lines[i].match(/^\s*KillMode\s*=\s*(\S*)/i);
+    if (match) {
+      effectiveKillMode = match[1];
+    }
+  }
+  return effectiveKillMode === "process";
 }
 
 export class SystemdServiceManager implements ServiceManager {
@@ -172,12 +207,68 @@ export class SystemdServiceManager implements ServiceManager {
     return { removedPath };
   }
 
+  /**
+   * Ensures an existing systemd unit file sets KillMode=process in [Service].
+   * Returns true if the unit file was modified.
+   */
+  ensureProcessKillMode(unitPath: string): boolean {
+    if (!existsSync(unitPath)) {
+      return false;
+    }
+
+    const content = readFileSync(unitPath, "utf-8");
+    const eol = content.includes("\r\n") ? "\r\n" : "\n";
+    const lines = content.split(/\r?\n/);
+    const range = findServiceSectionRange(lines);
+    if (!range) {
+      return false;
+    }
+
+    const killModeIndices: number[] = [];
+    for (let i = range.start + 1; i < range.end; i++) {
+      if (/^\s*KillMode\s*=/i.test(lines[i])) {
+        killModeIndices.push(i);
+      }
+    }
+
+    if (killModeIndices.length === 1) {
+      const match = lines[killModeIndices[0]].match(/^\s*KillMode\s*=\s*(\S*)/i);
+      if (match?.[1] === "process") {
+        return false;
+      }
+      lines[killModeIndices[0]] = "KillMode=process";
+    } else if (killModeIndices.length > 1) {
+      // Replace first KillMode= with KillMode=process and remove duplicates
+      lines[killModeIndices[0]] = "KillMode=process";
+      for (let k = killModeIndices.length - 1; k >= 1; k--) {
+        lines.splice(killModeIndices[k], 1);
+      }
+    } else {
+      // Insert after the last non-empty line in [Service]
+      let insertAfter = range.start;
+      for (let i = range.end - 1; i > range.start; i--) {
+        if (lines[i].trim() !== "") {
+          insertAfter = i;
+          break;
+        }
+      }
+      lines.splice(insertAfter + 1, 0, "KillMode=process");
+    }
+
+    writeFileSync(unitPath, lines.join(eol), "utf-8");
+    return true;
+  }
+
   async start(options: ServiceCliOptions): Promise<void> {
     const unitPath = this.getUnitPath(options.name, options.system);
     if (!existsSync(unitPath)) {
       throw new Error(
         `Service unit not found at ${unitPath}. Please run 'knife service install' first.`,
       );
+    }
+
+    if (this.ensureProcessKillMode(unitPath)) {
+      this.runner.run("systemctl", this.getSystemctlArgs(options.system, "daemon-reload"));
     }
 
     const res = this.runner.run(
@@ -200,6 +291,11 @@ export class SystemdServiceManager implements ServiceManager {
   }
 
   async restart(options: ServiceCliOptions): Promise<void> {
+    const unitPath = this.getUnitPath(options.name, options.system);
+    if (this.ensureProcessKillMode(unitPath)) {
+      this.runner.run("systemctl", this.getSystemctlArgs(options.system, "daemon-reload"));
+    }
+
     const res = this.runner.run(
       "systemctl",
       this.getSystemctlArgs(options.system, "restart", `${options.name}.service`),

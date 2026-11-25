@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   buildResolvedServiceContext,
@@ -314,6 +314,73 @@ describe("Platform Factory & Managers", () => {
     expect(runner.calls.some((c) => c.cmd === "systemctl" && c.args.includes("restart"))).toBe(
       true,
     );
+  });
+
+  it("patches legacy systemd units with KillMode=process and runs daemon-reload before start and restart", async () => {
+    const runner = new MockCommandRunner();
+    const manager = new SystemdServiceManager(runner);
+    const unitDir = join(tmpDir, ".config", "systemd", "user");
+    mkdirSync(unitDir, { recursive: true });
+    const legacyUnit = join(unitDir, "legacy-knife.service");
+
+    const origHome = process.env.HOME;
+    process.env.HOME = tmpDir;
+    try {
+      // 1. Unit without KillMode=process -> patched on restart, daemon-reload called before restart
+      writeFileSync(
+        legacyUnit,
+        `[Unit]\nDescription=Custom Knife\n\n[Service]\nWorkingDirectory=/custom/dir\nExecStart=/home/user/.bun/bin/knife --port 4000\nEnvironment="KNIFE_CUSTOM=1"\nRestart=always\n\n[Install]\nWantedBy=default.target\n`,
+        "utf-8",
+      );
+
+      await manager.restart({ action: "restart", name: "legacy-knife", system: false, env: {} });
+      const patched = readFileSync(legacyUnit, "utf-8");
+      expect(patched).toContain("KillMode=process");
+      expect(patched).toContain("WorkingDirectory=/custom/dir");
+      expect(patched).toContain("ExecStart=/home/user/.bun/bin/knife --port 4000");
+      expect(patched).toContain('Environment="KNIFE_CUSTOM=1"');
+
+      const reloadIdx = runner.calls.findIndex(
+        (c) => c.cmd === "systemctl" && c.args.includes("daemon-reload"),
+      );
+      const restartIdx = runner.calls.findIndex(
+        (c) => c.cmd === "systemctl" && c.args.includes("restart"),
+      );
+      expect(reloadIdx).toBeGreaterThanOrEqual(0);
+      expect(restartIdx).toBeGreaterThan(reloadIdx);
+
+      // 2. Second restart with KillMode=process already present -> does not run daemon-reload again
+      runner.calls = [];
+      await manager.restart({ action: "restart", name: "legacy-knife", system: false, env: {} });
+      expect(
+        runner.calls.some((c) => c.cmd === "systemctl" && c.args.includes("daemon-reload")),
+      ).toBe(false);
+      expect(runner.calls.some((c) => c.cmd === "systemctl" && c.args.includes("restart"))).toBe(
+        true,
+      );
+
+      // 3. Unit with KillMode=control-group -> updated to KillMode=process on start
+      writeFileSync(
+        legacyUnit,
+        `[Service]\nExecStart=/usr/bin/bun run /app/server/index.ts\nKillMode=control-group\n`,
+        "utf-8",
+      );
+      runner.calls = [];
+      await manager.start({ action: "start", name: "legacy-knife", system: false, env: {} });
+      const updated = readFileSync(legacyUnit, "utf-8");
+      expect(updated).toContain("KillMode=process");
+      expect(updated).not.toContain("KillMode=control-group");
+      const startReloadIdx = runner.calls.findIndex(
+        (c) => c.cmd === "systemctl" && c.args.includes("daemon-reload"),
+      );
+      const startIdx = runner.calls.findIndex(
+        (c) => c.cmd === "systemctl" && c.args.includes("start"),
+      );
+      expect(startReloadIdx).toBeGreaterThanOrEqual(0);
+      expect(startIdx).toBeGreaterThan(startReloadIdx);
+    } finally {
+      process.env.HOME = origHome;
+    }
   });
 
   it("executes LaunchdServiceManager lifecycle commands using mock runner", async () => {

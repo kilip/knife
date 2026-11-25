@@ -1,6 +1,6 @@
 import { accessSync, constants, existsSync, readFileSync, statSync } from "node:fs";
 import os from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { DEFAULT_CONFIG, type KnifeConfig, validateHost, validatePort } from "../../config";
 import {
   detectInstalledService,
@@ -8,6 +8,7 @@ import {
   isWsl,
   resolveBunExecutable,
 } from "../../service";
+import { hasProcessKillMode } from "../../service/managers/systemd";
 import { defaultRunner } from "../../service/runner";
 import type { CommandRunner } from "../../service/types";
 import { getUserShell } from "../terminal/shell";
@@ -156,12 +157,21 @@ export function extractServiceUnitPaths(
   if (!execMatch) return {};
   const tokens = tokenizeSystemdExecStart(execMatch[1].trim());
   if (tokens.length === 0) return {};
+  const firstBase = basename(tokens[0]);
+  if (firstBase === "knife" || firstBase === "knife.js") {
+    return {};
+  }
   const bunPath = tokens[0];
   const runIdx = tokens.indexOf("run");
-  const entrypointPath =
+  const candidateEntrypoint =
     runIdx >= 0 && runIdx + 1 < tokens.length
       ? tokens[runIdx + 1]
       : tokens.find((tok) => tok.endsWith("server/index.ts") || tok.endsWith("server\\index.ts"));
+  const entrypointPath =
+    candidateEntrypoint &&
+    (basename(candidateEntrypoint) === "knife" || basename(candidateEntrypoint) === "knife.js")
+      ? undefined
+      : candidateEntrypoint;
   return { bunPath, entrypointPath };
 }
 
@@ -753,6 +763,7 @@ export async function runDoctorChecks(
     const unitErrors: string[] = [];
     const unitWarnings: string[] = [];
     const unitPath = svc.status.unitPath;
+    let missingKillMode = false;
 
     if (existsSync(unitPath)) {
       try {
@@ -770,6 +781,12 @@ export async function runDoctorChecks(
               `unit points to ${entrypointPath}, current CLI is ${expectedEntrypoint}`,
             );
           }
+        }
+        if (platform === "linux" && !hasProcessKillMode(unitContent)) {
+          missingKillMode = true;
+          unitWarnings.push(
+            "systemd unit is missing KillMode=process (child tmux processes may be killed on restart)",
+          );
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -823,7 +840,9 @@ export async function runDoctorChecks(
         message: `Service '${options.serviceName}' (${scopeLabel}) running${pidText}; ${unitWarnings.join("; ")}`,
         hint: lingerDisabled
           ? "Enable lingering with 'loginctl enable-linger' or run 'knife service install'."
-          : "Run 'knife service install && knife service restart' if paths changed.",
+          : missingKillMode
+            ? "Run 'knife service install' or 'knife service restart' to add KillMode=process."
+            : "Run 'knife service install && knife service restart' if paths changed.",
       });
     } else if (svc.status.status === "running") {
       checks.push({
@@ -840,7 +859,9 @@ export async function runDoctorChecks(
         message: `Service '${options.serviceName}' (${scopeLabel}) is installed (${svc.status.status}) at ${unitPath}${
           unitWarnings.length > 0 ? `; ${unitWarnings.join("; ")}` : ""
         }`,
-        hint: "Start service with 'knife service start'.",
+        hint: missingKillMode
+          ? "Run 'knife service install' or 'knife service restart' to add KillMode=process, then 'knife service start'."
+          : "Start service with 'knife service start'.",
       });
     }
   }
